@@ -1,4 +1,4 @@
-package com.paymentgateway.payments.domain;
+package com.paymentgateway.payments.domain.model;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -11,12 +11,8 @@ public enum PaymentState {
     REFUNDED,
     VOIDED;
 
-    private static final Map<PaymentState, Map<PaymentCommand, PaymentState>> TRANSITIONS =
-            buildTransitionTable();
+    private static final Map<PaymentState, Map<PaymentCommand, PaymentState>> TRANSITIONS = buildTransitionTable();
 
-    /**
-     * @return the successor state when {@code command} is legal from {@code this}; empty if illegal
-     */
     public Optional<PaymentState> resolveTransition(PaymentCommand command) {
         Map<PaymentCommand, PaymentState> row = TRANSITIONS.get(this);
         if (row == null) {

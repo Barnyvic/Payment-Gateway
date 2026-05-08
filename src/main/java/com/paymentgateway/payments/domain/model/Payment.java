@@ -1,5 +1,10 @@
-package com.paymentgateway.payments.domain;
+package com.paymentgateway.payments.domain.model;
 
+import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
+import com.paymentgateway.payments.domain.value.CustomerId;
+import com.paymentgateway.payments.domain.value.Money;
+import com.paymentgateway.payments.domain.value.OrderId;
+import com.paymentgateway.payments.domain.value.PaymentRef;
 import java.util.Objects;
 
 public final class Payment {
@@ -23,15 +28,10 @@ public final class Payment {
         this.state = Objects.requireNonNull(state, "state");
     }
 
-
     public static Payment pending(PaymentRef paymentRef, OrderId orderId, CustomerId customerId, Money money) {
         return new Payment(paymentRef, orderId, customerId, money, PaymentState.PENDING);
     }
 
-    /**
-     * Reconstructs the aggregate from stored state. Used by the persistence layer only; callers must
-     * not use this to skip lifecycle rules on new payments.
-     */
     public static Payment rehydrate(
             PaymentRef paymentRef,
             OrderId orderId,

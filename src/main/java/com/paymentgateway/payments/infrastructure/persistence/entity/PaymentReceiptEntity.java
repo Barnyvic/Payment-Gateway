@@ -1,8 +1,8 @@
 package com.paymentgateway.payments.infrastructure.persistence.entity;
 
 import com.github.f4b6a3.uuid.UuidCreator;
-import com.paymentgateway.payments.domain.PaymentState;
-import com.paymentgateway.payments.domain.SupportedCurrency;
+import com.paymentgateway.payments.domain.model.PaymentState;
+import com.paymentgateway.payments.domain.value.SupportedCurrency;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

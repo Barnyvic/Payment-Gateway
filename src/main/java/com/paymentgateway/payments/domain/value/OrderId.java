@@ -1,4 +1,4 @@
-package com.paymentgateway.payments.domain;
+package com.paymentgateway.payments.domain.value;
 
 import java.util.Objects;
 

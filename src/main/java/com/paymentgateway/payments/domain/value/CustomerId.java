@@ -1,8 +1,7 @@
-package com.paymentgateway.payments.domain;
+package com.paymentgateway.payments.domain.value;
 
 import java.util.Objects;
 
-/** FicMart customer identifier. Immutable value object. */
 public record CustomerId(String value) {
 
     public CustomerId {

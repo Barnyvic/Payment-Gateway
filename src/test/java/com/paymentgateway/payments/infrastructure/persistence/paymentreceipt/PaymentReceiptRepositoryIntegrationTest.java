@@ -2,16 +2,16 @@ package com.paymentgateway.payments.infrastructure.persistence.paymentreceipt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.paymentgateway.payments.domain.CustomerId;
-import com.paymentgateway.payments.domain.Money;
-import com.paymentgateway.payments.domain.OrderId;
-import com.paymentgateway.payments.domain.Payment;
-import com.paymentgateway.payments.domain.PaymentRef;
-import com.paymentgateway.payments.domain.PaymentState;
-import com.paymentgateway.payments.domain.SupportedCurrency;
 import com.paymentgateway.AbstractPostgresIntegrationTest;
 import com.paymentgateway.gateway.PaymentGatewayApplication;
+import com.paymentgateway.payments.domain.model.Payment;
+import com.paymentgateway.payments.domain.model.PaymentState;
 import com.paymentgateway.payments.domain.repository.PaymentReceiptRepository;
+import com.paymentgateway.payments.domain.value.CustomerId;
+import com.paymentgateway.payments.domain.value.Money;
+import com.paymentgateway.payments.domain.value.OrderId;
+import com.paymentgateway.payments.domain.value.PaymentRef;
+import com.paymentgateway.payments.domain.value.SupportedCurrency;
 import com.paymentgateway.payments.infrastructure.persistence.entity.PaymentReceiptEntity;
 import com.paymentgateway.payments.infrastructure.persistence.repository.PaymentReceiptJpaRepository;
 import java.util.UUID;

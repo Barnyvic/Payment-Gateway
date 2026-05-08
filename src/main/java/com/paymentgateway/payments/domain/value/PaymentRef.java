@@ -1,4 +1,4 @@
-package com.paymentgateway.payments.domain;
+package com.paymentgateway.payments.domain.value;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import java.util.Objects;
@@ -11,7 +11,6 @@ public record PaymentRef(UUID value) {
     }
 
     public static PaymentRef generate() {
-        // UUIDv7 is time-ordered and improves index locality for write-heavy tables.
         return new PaymentRef(UuidCreator.getTimeOrderedEpoch());
     }
 }

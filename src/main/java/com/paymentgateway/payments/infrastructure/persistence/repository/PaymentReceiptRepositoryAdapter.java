@@ -1,10 +1,10 @@
 package com.paymentgateway.payments.infrastructure.persistence.repository;
 
-import com.paymentgateway.payments.domain.CustomerId;
-import com.paymentgateway.payments.domain.OrderId;
-import com.paymentgateway.payments.domain.Payment;
-import com.paymentgateway.payments.domain.PaymentRef;
+import com.paymentgateway.payments.domain.model.Payment;
 import com.paymentgateway.payments.domain.repository.PaymentReceiptRepository;
+import com.paymentgateway.payments.domain.value.CustomerId;
+import com.paymentgateway.payments.domain.value.OrderId;
+import com.paymentgateway.payments.domain.value.PaymentRef;
 import com.paymentgateway.payments.infrastructure.persistence.entity.PaymentReceiptEntity;
 import com.paymentgateway.payments.infrastructure.persistence.mapper.PaymentReceiptMapper;
 import java.time.Clock;

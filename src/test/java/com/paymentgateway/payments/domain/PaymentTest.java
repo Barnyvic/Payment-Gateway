@@ -3,6 +3,15 @@ package com.paymentgateway.payments.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
+import com.paymentgateway.payments.domain.model.PaymentCommand;
+import com.paymentgateway.payments.domain.model.Payment;
+import com.paymentgateway.payments.domain.model.PaymentState;
+import com.paymentgateway.payments.domain.value.CustomerId;
+import com.paymentgateway.payments.domain.value.Money;
+import com.paymentgateway.payments.domain.value.OrderId;
+import com.paymentgateway.payments.domain.value.PaymentRef;
+import com.paymentgateway.payments.domain.value.SupportedCurrency;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 

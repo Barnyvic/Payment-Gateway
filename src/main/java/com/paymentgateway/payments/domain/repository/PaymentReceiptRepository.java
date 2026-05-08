@@ -1,16 +1,12 @@
 package com.paymentgateway.payments.domain.repository;
 
-import com.paymentgateway.payments.domain.CustomerId;
-import com.paymentgateway.payments.domain.OrderId;
-import com.paymentgateway.payments.domain.Payment;
-import com.paymentgateway.payments.domain.PaymentRef;
+import com.paymentgateway.payments.domain.model.Payment;
+import com.paymentgateway.payments.domain.value.CustomerId;
+import com.paymentgateway.payments.domain.value.OrderId;
+import com.paymentgateway.payments.domain.value.PaymentRef;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Outbound port: persist and load payment receipts (gateway source of truth). Implementations
- * live in infrastructure; the domain aggregate stays persistence-agnostic.
- */
 public interface PaymentReceiptRepository {
 
     Payment save(Payment payment);

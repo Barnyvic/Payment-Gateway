@@ -2,6 +2,8 @@ package com.paymentgateway.payments.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.paymentgateway.payments.domain.model.PaymentCommand;
+import com.paymentgateway.payments.domain.model.PaymentState;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
