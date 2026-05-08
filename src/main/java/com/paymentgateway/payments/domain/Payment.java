@@ -28,6 +28,20 @@ public final class Payment {
         return new Payment(paymentRef, orderId, customerId, money, PaymentState.PENDING);
     }
 
+    /**
+     * Reconstructs the aggregate from stored state. Used by the persistence layer only; callers must
+     * not use this to skip lifecycle rules on new payments.
+     */
+    public static Payment rehydrate(
+            PaymentRef paymentRef,
+            OrderId orderId,
+            CustomerId customerId,
+            Money money,
+            PaymentState state) {
+        Objects.requireNonNull(state, "state");
+        return new Payment(paymentRef, orderId, customerId, money, state);
+    }
+
     public void authorize() {
         transition(PaymentCommand.AUTHORIZE);
     }
