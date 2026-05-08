@@ -86,20 +86,9 @@ public class PaymentReceiptEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @PrePersist
-    void onCreate() {
-        if (paymentRef == null) {
-            paymentRef = UuidCreator.getTimeOrderedEpoch();
-        }
-        Instant now = Instant.now();
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
+    public PaymentReceiptEntity() {
+        this.paymentRef = UuidCreator.getTimeOrderedEpoch();
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
     }
 }
