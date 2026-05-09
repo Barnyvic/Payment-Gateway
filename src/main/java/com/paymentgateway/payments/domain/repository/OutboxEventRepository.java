@@ -13,4 +13,9 @@ public interface OutboxEventRepository {
     Optional<OutboxEvent> findById(UUID eventId);
 
     List<OutboxEvent> leaseReadyEvents(Instant now, int limit);
+
+    boolean markProcessed(UUID eventId, Instant now);
+
+    boolean markRetryableFailure(
+            UUID eventId, String errorCode, String errorMessage, Instant nextAttemptAt, Instant now);
 }

@@ -4,6 +4,8 @@ import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.infrastructure.persistence.entity.OutboxEventEntity;
 import com.paymentgateway.payments.infrastructure.persistence.mapper.OutboxEventMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class OutboxEventRepositoryAdapter implements OutboxEventRepository {
 
     private final OutboxEventJpaRepository jpa;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public OutboxEventRepositoryAdapter(OutboxEventJpaRepository jpa) {
         this.jpa = jpa;
@@ -37,8 +41,28 @@ public class OutboxEventRepositoryAdapter implements OutboxEventRepository {
     @Override
     @Transactional
     public List<OutboxEvent> leaseReadyEvents(Instant now, int limit) {
-        return jpa.leaseReadyEvents(now, limit).stream()
+        List<UUID> leasedIds = jpa.leaseReadyEvents(now, limit);
+        entityManager.clear();
+        return leasedIds.stream()
+                .map(id -> jpa.findById(id).orElseThrow())
                 .map(OutboxEventMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public boolean markProcessed(UUID eventId, Instant now) {
+        boolean changed = jpa.markProcessed(eventId, now) > 0;
+        entityManager.clear();
+        return changed;
+    }
+
+    @Override
+    @Transactional
+    public boolean markRetryableFailure(
+            UUID eventId, String errorCode, String errorMessage, Instant nextAttemptAt, Instant now) {
+        boolean changed = jpa.markRetryableFailure(eventId, errorCode, errorMessage, nextAttemptAt, now) > 0;
+        entityManager.clear();
+        return changed;
     }
 }
