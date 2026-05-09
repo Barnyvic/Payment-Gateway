@@ -65,4 +65,12 @@ public class OutboxEventRepositoryAdapter implements OutboxEventRepository {
         entityManager.clear();
         return changed;
     }
+
+    @Override
+    @Transactional
+    public boolean markTerminalFailure(UUID eventId, String errorCode, String errorMessage, Instant now) {
+        boolean changed = jpa.markTerminalFailure(eventId, errorCode, errorMessage, now) > 0;
+        entityManager.clear();
+        return changed;
+    }
 }

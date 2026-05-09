@@ -73,4 +73,23 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventEntit
             @Param("errorMessage") String errorMessage,
             @Param("nextAttemptAt") Instant nextAttemptAt,
             @Param("now") Instant now);
+
+    @Modifying
+    @Query(
+            value =
+                    """
+                    UPDATE outbox_events
+                    SET status = 'FAILED',
+                        last_error_code = :errorCode,
+                        last_error_message = :errorMessage,
+                        updated_at = :now
+                    WHERE event_id = :eventId
+                      AND status = 'IN_PROGRESS'
+                    """,
+            nativeQuery = true)
+    int markTerminalFailure(
+            @Param("eventId") UUID eventId,
+            @Param("errorCode") String errorCode,
+            @Param("errorMessage") String errorMessage,
+            @Param("now") Instant now);
 }

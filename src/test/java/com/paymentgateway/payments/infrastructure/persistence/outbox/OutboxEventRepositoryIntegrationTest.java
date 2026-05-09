@@ -158,4 +158,27 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         assertThat(row.getStatus()).isEqualTo(OutboxStatus.FAILED);
         assertThat(row.getAttemptCount()).isEqualTo(1);
     }
+
+    @Test
+    void markTerminalFailure_marksFailedImmediately() {
+        Instant now = Instant.parse("2026-05-09T12:30:00Z");
+        OutboxEvent event = OutboxEvent.enqueue(
+                UuidCreator.getTimeOrderedEpoch(),
+                PaymentRef.generate(),
+                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                "{\"op\":\"capture\"}",
+                now.minusSeconds(10));
+        repository.save(event);
+        OutboxEvent leased = repository.leaseReadyEvents(now, 1).getFirst();
+
+        boolean changed = repository.markTerminalFailure(
+                leased.getEventId(), "invalid_state", "cannot capture voided auth", now.plusSeconds(1));
+
+        assertThat(changed).isTrue();
+        entityManager.clear();
+        OutboxEventEntity row = jpaRepository.findById(leased.getEventId()).orElseThrow();
+        assertThat(row.getStatus()).isEqualTo(OutboxStatus.FAILED);
+        assertThat(row.getLastErrorCode()).isEqualTo("invalid_state");
+        assertThat(row.getLastErrorMessage()).isEqualTo("cannot capture voided auth");
+    }
 }

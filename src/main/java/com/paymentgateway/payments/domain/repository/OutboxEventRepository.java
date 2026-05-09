@@ -18,4 +18,6 @@ public interface OutboxEventRepository {
 
     boolean markRetryableFailure(
             UUID eventId, String errorCode, String errorMessage, Instant nextAttemptAt, Instant now);
+
+    boolean markTerminalFailure(UUID eventId, String errorCode, String errorMessage, Instant now);
 }

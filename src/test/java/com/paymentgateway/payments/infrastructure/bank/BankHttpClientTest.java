@@ -16,6 +16,7 @@ import com.paymentgateway.payments.infrastructure.bank.model.BankRefundRequest;
 import com.paymentgateway.payments.infrastructure.bank.model.BankRefundResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankVoidRequest;
 import com.paymentgateway.payments.infrastructure.bank.model.BankVoidResponse;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -24,16 +25,17 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-class MockBankClientTest {
+class BankHttpClientTest {
 
     private MockRestServiceServer server;
-    private MockBankClient client;
+    private BankHttpClient client;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new MockBankClient(builder, new BankErrorMapper(new ObjectMapper()), "http://localhost:8787");
+        RestClient restClient = builder.baseUrl("http://localhost:8787").build();
+        client = new BankHttpClient(restClient, new BankErrorMapper(new ObjectMapper()));
     }
 
     @Test
@@ -108,5 +110,34 @@ class MockBankClientTest {
         assertEquals("void_123", response.voidId());
         assertEquals("VOIDED", response.status());
         server.verify();
+    }
+
+    @Test
+    void authorize_shouldFailWhenResponseBodyIsEmpty() {
+        server.expect(requestTo("http://localhost:8787/api/v1/authorizations"))
+                .andRespond(withStatus(HttpStatus.OK));
+
+        BankClientException ex = assertThrows(
+                BankClientException.class,
+                () -> client.authorize(
+                        new BankAuthorizeRequest("4111111111111111", "123", "12", "2030", 5000L, "USD"),
+                        "idem-auth-empty"));
+
+        assertEquals("bank_empty_response", ex.getDetails().code());
+        assertEquals(502, ex.getDetails().httpStatus());
+    }
+
+    @Test
+    void constructor_shouldRejectInsecureNonLocalhostBaseUrl() {
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> new BankHttpClient(
+                        RestClient.builder(),
+                        new BankErrorMapper(new ObjectMapper()),
+                        "http://bank.example.com",
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(5)));
+
+        assertEquals("Insecure HTTP bank base URL is allowed only for localhost.", ex.getMessage());
     }
 }
