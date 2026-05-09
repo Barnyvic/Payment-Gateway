@@ -15,14 +15,12 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
 @Table(name = "payment_receipts")
 @Getter
 @Setter
-@NoArgsConstructor
 public class PaymentReceiptEntity {
 
     @Id
