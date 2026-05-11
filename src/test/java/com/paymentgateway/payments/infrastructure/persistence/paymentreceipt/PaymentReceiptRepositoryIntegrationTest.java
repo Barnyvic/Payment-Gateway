@@ -6,6 +6,7 @@ import com.paymentgateway.AbstractPostgresIntegrationTest;
 import com.paymentgateway.gateway.PaymentGatewayApplication;
 import com.paymentgateway.payments.domain.model.Payment;
 import com.paymentgateway.payments.domain.model.PaymentState;
+import com.paymentgateway.payments.domain.query.PaymentReceiptRecord;
 import com.paymentgateway.payments.domain.repository.PaymentReceiptRepository;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.Money;
@@ -95,5 +96,28 @@ class PaymentReceiptRepositoryIntegrationTest extends AbstractPostgresIntegratio
                 .hasSize(2)
                 .extracting(p -> p.getPaymentRef().value())
                 .containsExactlyInAnyOrder(r1.value(), r2.value());
+    }
+
+    @Test
+    void findReceiptRecordsByOrderId_returnsFullProjection() {
+        OrderId orderId = new OrderId("order-read-projection");
+        PaymentRef ref = new PaymentRef(UUID.randomUUID());
+        repository.save(
+                Payment.pending(ref, orderId, new CustomerId("c-read"), new Money(99L, SupportedCurrency.USD)));
+
+        PaymentReceiptEntity row = jpaRepository.findById(ref.value()).orElseThrow();
+        row.setBankAuthorizationId("bank-auth-1");
+        row.setLastErrorCode("none");
+        jpaRepository.saveAndFlush(row);
+
+        assertThat(repository.findReceiptRecordsByOrderId(orderId))
+                .singleElement()
+                .satisfies((PaymentReceiptRecord rec) -> {
+                    assertThat(rec.paymentRef()).isEqualTo(ref.value());
+                    assertThat(rec.orderId()).isEqualTo("order-read-projection");
+                    assertThat(rec.bankAuthorizationId()).isEqualTo("bank-auth-1");
+                    assertThat(rec.lastErrorCode()).isEqualTo("none");
+                    assertThat(rec.createdAt()).isNotNull();
+                });
     }
 }

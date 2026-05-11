@@ -17,6 +17,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,7 @@ public class BankHttpClient implements BankClient {
     private final RestClient restClient;
     private final BankErrorMapper errorMapper;
 
+    @Autowired
     public BankHttpClient(
             RestClient.Builder restClientBuilder,
             BankErrorMapper errorMapper,

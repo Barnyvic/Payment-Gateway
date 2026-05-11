@@ -1,6 +1,7 @@
 package com.paymentgateway.payments.infrastructure.persistence.repository;
 
 import com.paymentgateway.payments.domain.model.Payment;
+import com.paymentgateway.payments.domain.query.PaymentReceiptRecord;
 import com.paymentgateway.payments.domain.repository.PaymentReceiptRepository;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.OrderId;
@@ -41,6 +42,13 @@ public class PaymentReceiptRepositoryAdapter implements PaymentReceiptRepository
     public List<Payment> findByOrderIdOrderByCreatedAtDesc(OrderId orderId) {
         return jpa.findByOrderIdOrderByCreatedAtDesc(orderId.value()).stream()
                 .map(PaymentReceiptMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<PaymentReceiptRecord> findReceiptRecordsByOrderId(OrderId orderId) {
+        return jpa.findByOrderIdOrderByCreatedAtDesc(orderId.value()).stream()
+                .map(PaymentReceiptMapper::toRecord)
                 .toList();
     }
 

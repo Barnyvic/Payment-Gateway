@@ -1,6 +1,7 @@
 package com.paymentgateway.payments.domain.repository;
 
 import com.paymentgateway.payments.domain.model.Payment;
+import com.paymentgateway.payments.domain.query.PaymentReceiptRecord;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.OrderId;
 import com.paymentgateway.payments.domain.value.PaymentRef;
@@ -14,6 +15,8 @@ public interface PaymentReceiptRepository {
     Optional<Payment> findByPaymentRef(PaymentRef paymentRef);
 
     List<Payment> findByOrderIdOrderByCreatedAtDesc(OrderId orderId);
+
+    List<PaymentReceiptRecord> findReceiptRecordsByOrderId(OrderId orderId);
 
     List<Payment> findByCustomerIdOrderByCreatedAtDesc(CustomerId customerId);
 }

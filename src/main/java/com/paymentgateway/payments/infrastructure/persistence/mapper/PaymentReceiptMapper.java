@@ -2,6 +2,7 @@ package com.paymentgateway.payments.infrastructure.persistence.mapper;
 
 import com.paymentgateway.payments.domain.model.Payment;
 import com.paymentgateway.payments.domain.model.PaymentState;
+import com.paymentgateway.payments.domain.query.PaymentReceiptRecord;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.Money;
 import com.paymentgateway.payments.domain.value.OrderId;
@@ -25,6 +26,29 @@ public final class PaymentReceiptMapper {
                 new CustomerId(entity.getCustomerId()),
                 new Money(entity.getAmountCents(), entity.getCurrency()),
                 entity.getState());
+    }
+
+    public static PaymentReceiptRecord toRecord(PaymentReceiptEntity entity) {
+        return new PaymentReceiptRecord(
+                entity.getPaymentRef(),
+                entity.getOrderId(),
+                entity.getCustomerId(),
+                entity.getAmountCents(),
+                entity.getCurrency(),
+                entity.getState(),
+                entity.getVersion(),
+                entity.getAuthorizedAt(),
+                entity.getCapturedAt(),
+                entity.getVoidedAt(),
+                entity.getRefundedAt(),
+                entity.getBankAuthorizationId(),
+                entity.getBankCaptureId(),
+                entity.getBankVoidId(),
+                entity.getBankRefundId(),
+                entity.getLastErrorCode(),
+                entity.getLastErrorMessage(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt());
     }
 
     public static void mergeAggregate(Payment payment, PaymentReceiptEntity entity, Clock clock) {
