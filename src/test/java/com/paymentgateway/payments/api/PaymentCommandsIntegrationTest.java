@@ -8,15 +8,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.paymentgateway.AbstractPostgresIntegrationTest;
 import com.paymentgateway.gateway.PaymentGatewayApplication;
+import com.paymentgateway.payments.TestBankClientConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(classes = PaymentGatewayApplication.class)
 @AutoConfigureMockMvc
+@Import(TestBankClientConfig.class)
 @Transactional
 class PaymentCommandsIntegrationTest extends AbstractPostgresIntegrationTest {
 
@@ -36,7 +39,7 @@ class PaymentCommandsIntegrationTest extends AbstractPostgresIntegrationTest {
                         .content(body))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.paymentRef").exists())
-                .andExpect(jsonPath("$.receiptStateAtEnqueue").value("PENDING"));
+                .andExpect(jsonPath("$.receiptStateAtEnqueue").value("AUTHORIZED"));
 
         mockMvc.perform(post("/v1/payments/authorize")
                         .header(PaymentHttpConstants.IDEMPOTENCY_KEY_HEADER, "idem-auth-a")

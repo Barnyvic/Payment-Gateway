@@ -1,6 +1,7 @@
 package com.paymentgateway.payments.api.web;
 
 import com.paymentgateway.payments.api.dto.ErrorResponse;
+import com.paymentgateway.payments.application.exception.PaymentAuthorizationException;
 import com.paymentgateway.payments.domain.exception.IdempotencyInProgressException;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
 import com.paymentgateway.payments.domain.exception.NoReceiptsForOrderException;
@@ -68,6 +69,16 @@ public class PaymentApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIdempotencyInProgress(IdempotencyInProgressException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse("IDEMPOTENCY_IN_PROGRESS", ex.getMessage()));
+    }
+
+    @ExceptionHandler(PaymentAuthorizationException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentAuthorization(PaymentAuthorizationException ex) {
+        if (ex.isTransientFailure()) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(new ErrorResponse("BANK_AUTHORIZATION_UNAVAILABLE", ex.getMessage()));
+        }
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ErrorResponse("BANK_AUTHORIZATION_DECLINED", ex.getMessage()));
     }
 
     @ExceptionHandler(InvalidPaymentTransitionException.class)

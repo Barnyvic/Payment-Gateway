@@ -5,7 +5,6 @@ import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
 import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.infrastructure.bank.BankClient;
-import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeRequest;
 import com.paymentgateway.payments.infrastructure.bank.model.BankCaptureRequest;
 import com.paymentgateway.payments.infrastructure.bank.model.BankClientException;
 import com.paymentgateway.payments.infrastructure.bank.model.BankErrorCategory;
@@ -93,19 +92,8 @@ public class OutboxWorkerExecutor {
     private void executeBankAndComplete(OutboxEvent event) {
         String bankIdempotencyKey = buildBankIdempotencyKey(event);
         switch (event.getEventType()) {
-            case PAYMENT_AUTHORIZE_REQUESTED -> {
-                AuthorizeOutboxPayload payload = readPayload(event.getPayload(), AuthorizeOutboxPayload.class);
-                var response = bankClient.authorize(
-                        new BankAuthorizeRequest(
-                                payload.cardNumber(),
-                                payload.cvv(),
-                                payload.expiryMonth(),
-                                payload.expiryYear(),
-                                payload.amountCents(),
-                                payload.currency()),
-                        bankIdempotencyKey);
-                outboxBankCompletionPort.recordAuthorize(event.getPaymentRef(), response);
-            }
+            case PAYMENT_AUTHORIZE_REQUESTED -> throw new IllegalArgumentException(
+                    "PAYMENT_AUTHORIZE_REQUESTED outbox events are no longer supported; authorization is synchronous.");
             case PAYMENT_CAPTURE_REQUESTED -> {
                 CaptureOutboxPayload payload = readPayload(event.getPayload(), CaptureOutboxPayload.class);
                 var response = bankClient.capture(

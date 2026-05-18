@@ -13,8 +13,6 @@ import com.paymentgateway.payments.domain.outbox.model.OutboxStatus;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import com.paymentgateway.payments.infrastructure.bank.BankClient;
-import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeRequest;
-import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankClientException;
 import com.paymentgateway.payments.infrastructure.bank.model.BankErrorCategory;
 import com.paymentgateway.payments.infrastructure.bank.model.BankErrorDetails;
@@ -27,7 +25,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -54,7 +51,7 @@ class OutboxWorkerExecutorTest {
     }
 
     @Test
-    void processBatch_shouldDispatchAuthorizeAndMarkProcessed() {
+    void processBatch_shouldRejectLegacyAuthorizeOutboxEvents() {
         OutboxEvent event = OutboxEvent.rehydrate(
                 UUID.randomUUID(),
                 PaymentRef.generate(),
@@ -68,24 +65,17 @@ class OutboxWorkerExecutorTest {
                 Instant.parse("2026-05-09T11:58:00Z"),
                 Instant.parse("2026-05-09T11:59:00Z"));
         when(outboxEventRepository.leaseReadyEvents(any(), eq(5))).thenReturn(List.of(event));
-        when(bankClient.authorize(any(), any())).thenReturn(new BankAuthorizeResponse("bank-auth-1", "AUTHORIZED"));
 
         int processed = executor.processBatch(5);
 
-        ArgumentCaptor<BankAuthorizeRequest> requestCaptor = ArgumentCaptor.forClass(BankAuthorizeRequest.class);
-        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
-        verify(bankClient).authorize(requestCaptor.capture(), keyCaptor.capture());
-        verify(outboxBankCompletionPort)
-                .recordAuthorize(eq(event.getPaymentRef()), org.mockito.ArgumentMatchers.any(BankAuthorizeResponse.class));
-        verify(outboxEventRepository).markProcessed(eq(event.getEventId()), eq(Instant.parse("2026-05-09T12:00:00Z")));
-        verify(outboxEventRepository, never()).markRetryableFailure(any(), any(), any(), any(), any());
-
-        BankAuthorizeRequest request = requestCaptor.getValue();
-        Assertions.assertEquals("4111111111111111", request.cardNumber());
-        Assertions.assertEquals(5000L, request.amountCents());
-        Assertions.assertEquals(
-                "bank:" + event.getPaymentRef().value() + ":payment_authorize_requested:" + event.getEventId(),
-                keyCaptor.getValue());
+        verify(outboxEventRepository).markTerminalFailure(
+                eq(event.getEventId()),
+                eq("unsupported_outbox_event_type"),
+                org.mockito.ArgumentMatchers.contains("PAYMENT_AUTHORIZE_REQUESTED"),
+                eq(Instant.parse("2026-05-09T12:00:00Z")));
+        verify(bankClient, never()).authorize(any(), any());
+        verify(outboxBankCompletionPort, never())
+                .recordCapture(any(), any());
         Assertions.assertEquals(1, processed);
     }
 

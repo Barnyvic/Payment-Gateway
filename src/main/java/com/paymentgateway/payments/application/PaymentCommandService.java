@@ -3,6 +3,9 @@ package com.paymentgateway.payments.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.f4b6a3.uuid.UuidCreator;
+import com.paymentgateway.payments.application.exception.PaymentAuthorizationException;
+import com.paymentgateway.payments.application.port.PaymentAuthorizationPort;
+import com.paymentgateway.payments.application.port.PaymentAuthorizationPort.AuthorizeBankCommand;
 import com.paymentgateway.payments.domain.exception.IdempotencyInProgressException;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
 import com.paymentgateway.payments.domain.exception.PaymentAwaitingBankException;
@@ -24,7 +27,6 @@ import com.paymentgateway.payments.domain.value.Money;
 import com.paymentgateway.payments.domain.value.OrderId;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import com.paymentgateway.payments.domain.value.SupportedCurrency;
-import com.paymentgateway.payments.infrastructure.jobs.outbox.AuthorizeOutboxPayload;
 import com.paymentgateway.payments.infrastructure.jobs.outbox.CaptureOutboxPayload;
 import com.paymentgateway.payments.infrastructure.jobs.outbox.RefundOutboxPayload;
 import com.paymentgateway.payments.infrastructure.jobs.outbox.VoidOutboxPayload;
@@ -45,6 +47,7 @@ public class PaymentCommandService {
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final PaymentRequestHasher paymentRequestHasher;
+    private final PaymentAuthorizationPort paymentAuthorizationPort;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -53,12 +56,14 @@ public class PaymentCommandService {
             IdempotencyRecordRepository idempotencyRecordRepository,
             OutboxEventRepository outboxEventRepository,
             PaymentRequestHasher paymentRequestHasher,
+            PaymentAuthorizationPort paymentAuthorizationPort,
             ObjectMapper objectMapper,
             Clock clock) {
         this.paymentReceiptRepository = paymentReceiptRepository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.paymentRequestHasher = paymentRequestHasher;
+        this.paymentAuthorizationPort = paymentAuthorizationPort;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -89,18 +94,28 @@ public class PaymentCommandService {
                 new Money(body.amountCents(), GATEWAY_CURRENCY));
         paymentReceiptRepository.save(payment);
 
-        String outboxPayload = writeJson(
-                new AuthorizeOutboxPayload(
-                        body.card().number(),
-                        body.card().cvv(),
-                        body.card().expiryMonth(),
-                        body.card().expiryYear(),
-                        body.amountCents(),
-                        GATEWAY_CURRENCY.name()));
-        UUID eventId = UuidCreator.getTimeOrderedEpoch();
-        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, OutboxEventType.PAYMENT_AUTHORIZE_REQUESTED, outboxPayload, now));
+        String bankIdempotencyKey = buildAuthorizeBankIdempotencyKey(paymentRef, idempotencyKey);
+        AuthorizeBankCommand bankCommand = new AuthorizeBankCommand(
+                body.card().number(),
+                body.card().cvv(),
+                body.card().expiryMonth(),
+                body.card().expiryYear(),
+                body.amountCents(),
+                GATEWAY_CURRENCY);
+        try {
+            var authorizeResult = paymentAuthorizationPort.authorize(bankCommand, bankIdempotencyKey);
+            paymentReceiptRepository.recordAuthorizeSuccess(paymentRef, authorizeResult.authorizationId());
+        } catch (PaymentAuthorizationException ex) {
+            if (ex.isTransientFailure()) {
+                throw ex;
+            }
+        }
 
-        String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), PaymentState.PENDING.name()));
+        PaymentState receiptState = paymentReceiptRepository
+                .findReceiptRecordByPaymentRef(paymentRef)
+                .map(PaymentReceiptRecord::state)
+                .orElse(PaymentState.PENDING);
+        String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), receiptState.name()));
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
         idempotencyRecordRepository.save(idempotency);
         return PaymentCommandDispatchResult.accepted202(acceptanceJson);
@@ -252,22 +267,31 @@ public class PaymentCommandService {
         }
     }
 
+    private static String buildAuthorizeBankIdempotencyKey(PaymentRef paymentRef, String clientIdempotencyKey) {
+        return "bank:" + paymentRef.value() + ":authorize:" + clientIdempotencyKey;
+    }
+
     private static AuthorizeHashPayload toAuthorizeHashPayload(AuthorizePaymentCommand body) {
         return new AuthorizeHashPayload(
                 body.orderId(),
                 body.customerId(),
-                body.card().number(),
-                body.card().cvv(),
+                cardLastFour(body.card().number()),
                 body.card().expiryMonth(),
                 body.card().expiryYear(),
                 body.amountCents());
     }
 
+    private static String cardLastFour(String cardNumber) {
+        if (cardNumber == null || cardNumber.length() < 4) {
+            return "0000";
+        }
+        return cardNumber.substring(cardNumber.length() - 4);
+    }
+
     private record AuthorizeHashPayload(
             String orderId,
             String customerId,
-            String cardNumber,
-            String cvv,
+            String cardLastFour,
             String expiryMonth,
             String expiryYear,
             long amountCents) {}

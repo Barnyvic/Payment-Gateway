@@ -2,7 +2,6 @@ package com.paymentgateway.payments.infrastructure.jobs.outbox;
 
 import com.paymentgateway.payments.domain.repository.PaymentReceiptRepository;
 import com.paymentgateway.payments.domain.value.PaymentRef;
-import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankCaptureResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankRefundResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankVoidResponse;
@@ -16,12 +15,6 @@ public class PaymentOutboxBankCompletionService implements OutboxBankCompletionP
 
     public PaymentOutboxBankCompletionService(PaymentReceiptRepository paymentReceiptRepository) {
         this.paymentReceiptRepository = paymentReceiptRepository;
-    }
-
-    @Override
-    @Transactional
-    public void recordAuthorize(PaymentRef paymentRef, BankAuthorizeResponse response) {
-        paymentReceiptRepository.recordAuthorizeSuccess(paymentRef, response.authorizationId());
     }
 
     @Override

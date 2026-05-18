@@ -7,6 +7,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
+/**
+ * Sole API surface that accepts raw card data. Card fields are used in-memory for a synchronous bank
+ * authorization and are never written to the outbox, idempotency snapshots, or query responses.
+ */
 public record AuthorizePaymentHttpRequest(
         @NotBlank String orderId,
         @NotBlank String customerId,
