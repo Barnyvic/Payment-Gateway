@@ -48,6 +48,31 @@ public final class IdempotencyRecord {
                 id, operation, idempotencyKey, requestHash, IdempotencyStatus.IN_PROGRESS, null, null, ts, ts);
     }
 
+    /**
+     * Record created when an async command is fully persisted (receipt + outbox) and the HTTP acceptance body
+     * should be replayed for duplicate requests with the same idempotency key and payload hash.
+     */
+    public static IdempotencyRecord accepted(
+            UUID id,
+            PaymentOperation operation,
+            String idempotencyKey,
+            String requestHash,
+            PaymentRef paymentRef,
+            String responseSnapshot,
+            Instant now) {
+        Instant ts = Objects.requireNonNull(now, "now");
+        return new IdempotencyRecord(
+                id,
+                operation,
+                idempotencyKey,
+                requestHash,
+                IdempotencyStatus.ACCEPTED,
+                requireNonBlank(responseSnapshot, "responseSnapshot"),
+                Objects.requireNonNull(paymentRef, "paymentRef"),
+                ts,
+                ts);
+    }
+
     public static IdempotencyRecord rehydrate(
             UUID id,
             PaymentOperation operation,
@@ -66,6 +91,19 @@ public final class IdempotencyRecord {
         if (!requestHash.equals(requireNonBlank(candidateHash, "candidateHash"))) {
             throw new IdempotencyConflictException(operation, idempotencyKey);
         }
+    }
+
+    /**
+     * Completes an outbox-first command: receipt and outbox rows are persisted, store the HTTP acceptance snapshot
+     * for deterministic idempotent replay.
+     */
+    public void acceptAsyncCommand(PaymentRef paymentRef, String responseSnapshot, Instant now) {
+        requireInProgressTransition("acceptAsyncCommand");
+        this.status = IdempotencyStatus.ACCEPTED;
+        this.paymentRef = Objects.requireNonNull(paymentRef, "paymentRef");
+        this.responseSnapshot = requireNonBlank(responseSnapshot, "responseSnapshot");
+        this.updatedAt = Objects.requireNonNull(now, "now");
+        validateInvariants();
     }
 
     public void markSucceeded(String responseSnapshot, PaymentRef paymentRef, Instant now) {
@@ -163,12 +201,12 @@ public final class IdempotencyRecord {
                 throw new IllegalArgumentException("IN_PROGRESS must not carry responseSnapshot or paymentRef");
             }
         }
-        if (status == IdempotencyStatus.SUCCEEDED) {
+        if (status == IdempotencyStatus.ACCEPTED || status == IdempotencyStatus.SUCCEEDED) {
             if (responseSnapshot == null || responseSnapshot.isBlank()) {
-                throw new IllegalArgumentException("SUCCEEDED requires non-blank responseSnapshot");
+                throw new IllegalArgumentException(status + " requires non-blank responseSnapshot");
             }
             if (paymentRef == null) {
-                throw new IllegalArgumentException("SUCCEEDED requires paymentRef");
+                throw new IllegalArgumentException(status + " requires paymentRef");
             }
         }
         if (status == IdempotencyStatus.FAILED) {

@@ -15,6 +15,41 @@ import org.junit.jupiter.api.Test;
 class IdempotencyRecordTest {
 
     @Test
+    void accepted_storesSnapshotAndPaymentRef() {
+        Instant now = Instant.parse("2026-05-08T20:00:00Z");
+        PaymentRef ref = PaymentRef.generate();
+        IdempotencyRecord record =
+                IdempotencyRecord.accepted(
+                        UUID.randomUUID(),
+                        PaymentOperation.AUTHORIZE,
+                        "key-a",
+                        "hash-a",
+                        ref,
+                        "{\"paymentRef\":\"" + ref.value() + "\"}",
+                        now);
+
+        assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.ACCEPTED);
+        assertThat(record.getPaymentRef()).contains(ref);
+        assertThat(record.getResponseSnapshot()).isPresent();
+    }
+
+    @Test
+    void acceptAsyncCommand_transitionsToAccepted() {
+        Instant now = Instant.parse("2026-05-08T20:00:00Z");
+        IdempotencyRecord record =
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.AUTHORIZE, "key-ac", "hash-ac", now);
+        PaymentRef ref = PaymentRef.generate();
+        Instant done = Instant.parse("2026-05-08T20:00:01Z");
+
+        record.acceptAsyncCommand(ref, "{\"ok\":true}", done);
+
+        assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.ACCEPTED);
+        assertThat(record.getPaymentRef()).contains(ref);
+        assertThat(record.getResponseSnapshot()).contains("{\"ok\":true}");
+        assertThat(record.getUpdatedAt()).isEqualTo(done);
+    }
+
+    @Test
     void start_setsInProgressAndTimestamps() {
         Instant now = Instant.parse("2026-05-08T20:00:00Z");
         IdempotencyRecord record =

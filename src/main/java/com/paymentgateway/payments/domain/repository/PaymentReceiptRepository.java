@@ -18,5 +18,17 @@ public interface PaymentReceiptRepository {
 
     List<PaymentReceiptRecord> findReceiptRecordsByOrderId(OrderId orderId);
 
+    List<PaymentReceiptRecord> findReceiptRecordsByCustomerId(CustomerId customerId, int limit);
+
+    Optional<PaymentReceiptRecord> findReceiptRecordByPaymentRef(PaymentRef paymentRef);
+
+    void recordAuthorizeSuccess(PaymentRef paymentRef, String bankAuthorizationId);
+
+    void recordCaptureSuccess(PaymentRef paymentRef, String bankCaptureId);
+
+    void recordVoidSuccess(PaymentRef paymentRef, String bankVoidId);
+
+    void recordRefundSuccess(PaymentRef paymentRef, String bankRefundId);
+
     List<Payment> findByCustomerIdOrderByCreatedAtDesc(CustomerId customerId);
 }

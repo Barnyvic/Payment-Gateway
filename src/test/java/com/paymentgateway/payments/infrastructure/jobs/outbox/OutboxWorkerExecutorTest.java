@@ -14,6 +14,7 @@ import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import com.paymentgateway.payments.infrastructure.bank.BankClient;
 import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeRequest;
+import com.paymentgateway.payments.infrastructure.bank.model.BankAuthorizeResponse;
 import com.paymentgateway.payments.infrastructure.bank.model.BankClientException;
 import com.paymentgateway.payments.infrastructure.bank.model.BankErrorCategory;
 import com.paymentgateway.payments.infrastructure.bank.model.BankErrorDetails;
@@ -39,13 +40,17 @@ class OutboxWorkerExecutorTest {
     @Mock
     private BankClient bankClient;
 
+    @Mock
+    private OutboxBankCompletionPort outboxBankCompletionPort;
+
     private OutboxWorkerExecutor executor;
     private Clock clock;
 
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-05-09T12:00:00Z"), ZoneOffset.UTC);
-        executor = new OutboxWorkerExecutor(outboxEventRepository, bankClient, new ObjectMapper(), clock);
+        executor = new OutboxWorkerExecutor(
+                outboxEventRepository, bankClient, new ObjectMapper(), clock, outboxBankCompletionPort);
     }
 
     @Test
@@ -63,12 +68,15 @@ class OutboxWorkerExecutorTest {
                 Instant.parse("2026-05-09T11:58:00Z"),
                 Instant.parse("2026-05-09T11:59:00Z"));
         when(outboxEventRepository.leaseReadyEvents(any(), eq(5))).thenReturn(List.of(event));
+        when(bankClient.authorize(any(), any())).thenReturn(new BankAuthorizeResponse("bank-auth-1", "AUTHORIZED"));
 
         int processed = executor.processBatch(5);
 
         ArgumentCaptor<BankAuthorizeRequest> requestCaptor = ArgumentCaptor.forClass(BankAuthorizeRequest.class);
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(bankClient).authorize(requestCaptor.capture(), keyCaptor.capture());
+        verify(outboxBankCompletionPort)
+                .recordAuthorize(eq(event.getPaymentRef()), org.mockito.ArgumentMatchers.any(BankAuthorizeResponse.class));
         verify(outboxEventRepository).markProcessed(eq(event.getEventId()), eq(Instant.parse("2026-05-09T12:00:00Z")));
         verify(outboxEventRepository, never()).markRetryableFailure(any(), any(), any(), any(), any());
 

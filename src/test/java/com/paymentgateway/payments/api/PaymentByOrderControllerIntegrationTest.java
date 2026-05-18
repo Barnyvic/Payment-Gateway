@@ -64,4 +64,34 @@ class PaymentByOrderControllerIntegrationTest extends AbstractPostgresIntegratio
                 .andExpect(jsonPath("$.payments[0].state").value("PENDING"))
                 .andExpect(jsonPath("$.payments[0].currency").value("USD"));
     }
+
+    @Test
+    void listByCustomer_returnsEmptyArrayWhenNoReceipts() throws Exception {
+        mockMvc.perform(get("/v1/payments/by-customer/unknown-customer-999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value("unknown-customer-999"))
+                .andExpect(jsonPath("$.payments.length()").value(0));
+    }
+
+    @Test
+    void listByCustomer_returnsReceiptsWithLimit() throws Exception {
+        CustomerId customerId = new CustomerId("cust-query-1");
+        paymentReceiptRepository.save(
+                Payment.pending(
+                        new PaymentRef(UUID.randomUUID()),
+                        new OrderId("o-a"),
+                        customerId,
+                        new Money(10L, SupportedCurrency.USD)));
+        paymentReceiptRepository.save(
+                Payment.pending(
+                        new PaymentRef(UUID.randomUUID()),
+                        new OrderId("o-b"),
+                        customerId,
+                        new Money(20L, SupportedCurrency.USD)));
+
+        mockMvc.perform(get("/v1/payments/by-customer/cust-query-1").param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value("cust-query-1"))
+                .andExpect(jsonPath("$.payments.length()").value(1));
+    }
 }

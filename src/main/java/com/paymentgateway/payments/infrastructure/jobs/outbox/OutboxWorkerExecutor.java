@@ -26,13 +26,19 @@ public class OutboxWorkerExecutor {
     private final BankClient bankClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final OutboxBankCompletionPort outboxBankCompletionPort;
 
     public OutboxWorkerExecutor(
-            OutboxEventRepository outboxEventRepository, BankClient bankClient, ObjectMapper objectMapper, Clock clock) {
+            OutboxEventRepository outboxEventRepository,
+            BankClient bankClient,
+            ObjectMapper objectMapper,
+            Clock clock,
+            OutboxBankCompletionPort outboxBankCompletionPort) {
         this.outboxEventRepository = outboxEventRepository;
         this.bankClient = bankClient;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.outboxBankCompletionPort = outboxBankCompletionPort;
     }
 
     public int processBatch() {
@@ -49,7 +55,7 @@ public class OutboxWorkerExecutor {
     private void processLeasedEvent(OutboxEvent event) {
         Instant now = Instant.now(clock);
         try {
-            dispatch(event);
+            executeBankAndComplete(event);
             outboxEventRepository.markProcessed(event.getEventId(), now);
         } catch (BankClientException ex) {
             if (ex.getDetails().category() == BankErrorCategory.TRANSIENT) {
@@ -84,12 +90,12 @@ public class OutboxWorkerExecutor {
         }
     }
 
-    private void dispatch(OutboxEvent event) {
+    private void executeBankAndComplete(OutboxEvent event) {
         String bankIdempotencyKey = buildBankIdempotencyKey(event);
         switch (event.getEventType()) {
             case PAYMENT_AUTHORIZE_REQUESTED -> {
                 AuthorizeOutboxPayload payload = readPayload(event.getPayload(), AuthorizeOutboxPayload.class);
-                bankClient.authorize(
+                var response = bankClient.authorize(
                         new BankAuthorizeRequest(
                                 payload.cardNumber(),
                                 payload.cvv(),
@@ -98,22 +104,26 @@ public class OutboxWorkerExecutor {
                                 payload.amountCents(),
                                 payload.currency()),
                         bankIdempotencyKey);
+                outboxBankCompletionPort.recordAuthorize(event.getPaymentRef(), response);
             }
             case PAYMENT_CAPTURE_REQUESTED -> {
                 CaptureOutboxPayload payload = readPayload(event.getPayload(), CaptureOutboxPayload.class);
-                bankClient.capture(
+                var response = bankClient.capture(
                         new BankCaptureRequest(payload.authorizationId(), payload.amountCents(), payload.currency()),
                         bankIdempotencyKey);
+                outboxBankCompletionPort.recordCapture(event.getPaymentRef(), response);
             }
             case PAYMENT_VOID_REQUESTED -> {
                 VoidOutboxPayload payload = readPayload(event.getPayload(), VoidOutboxPayload.class);
-                bankClient.voidAuthorization(new BankVoidRequest(payload.authorizationId()), bankIdempotencyKey);
+                var response = bankClient.voidAuthorization(new BankVoidRequest(payload.authorizationId()), bankIdempotencyKey);
+                outboxBankCompletionPort.recordVoid(event.getPaymentRef(), response);
             }
             case PAYMENT_REFUND_REQUESTED -> {
                 RefundOutboxPayload payload = readPayload(event.getPayload(), RefundOutboxPayload.class);
-                bankClient.refund(
+                var response = bankClient.refund(
                         new BankRefundRequest(payload.captureId(), payload.amountCents(), payload.currency()),
                         bankIdempotencyKey);
+                outboxBankCompletionPort.recordRefund(event.getPaymentRef(), response);
             }
         }
     }
