@@ -2,10 +2,11 @@ package com.paymentgateway.payments.api;
 
 import com.paymentgateway.payments.api.dto.PaymentsByCustomerResponse;
 import com.paymentgateway.payments.api.dto.PaymentsByOrderResponse;
-import com.paymentgateway.payments.application.ListPaymentsByCustomerService;
-import com.paymentgateway.payments.application.ListPaymentsByOrderService;
+import com.paymentgateway.payments.application.PaymentsQueryService;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.OrderId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,14 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/payments")
 public class PaymentsQueryController {
 
-    private final ListPaymentsByOrderService listPaymentsByOrderService;
-    private final ListPaymentsByCustomerService listPaymentsByCustomerService;
+    private static final Logger log = LoggerFactory.getLogger(PaymentsQueryController.class);
 
-    public PaymentsQueryController(
-            ListPaymentsByOrderService listPaymentsByOrderService,
-            ListPaymentsByCustomerService listPaymentsByCustomerService) {
-        this.listPaymentsByOrderService = listPaymentsByOrderService;
-        this.listPaymentsByCustomerService = listPaymentsByCustomerService;
+    private final PaymentsQueryService paymentsQueryService;
+
+    public PaymentsQueryController(PaymentsQueryService paymentsQueryService) {
+        this.paymentsQueryService = paymentsQueryService;
     }
 
     @GetMapping("/by-order/{orderId}")
@@ -34,7 +33,8 @@ public class PaymentsQueryController {
             throw new IllegalArgumentException("orderId must be non-blank");
         }
         OrderId id = new OrderId(normalized);
-        return ResponseEntity.ok(PaymentsByOrderResponse.of(id.value(), listPaymentsByOrderService.listByOrder(id)));
+        log.debug("GET /by-order/{}", id.value());
+        return ResponseEntity.ok(PaymentsByOrderResponse.of(id.value(), paymentsQueryService.listByOrder(id)));
     }
 
     @GetMapping("/by-customer/{customerId}")
@@ -46,7 +46,8 @@ public class PaymentsQueryController {
             throw new IllegalArgumentException("customerId must be non-blank");
         }
         CustomerId id = new CustomerId(normalized);
+        log.debug("GET /by-customer/{} limit={}", id.value(), limit);
         return ResponseEntity.ok(
-                PaymentsByCustomerResponse.of(id.value(), listPaymentsByCustomerService.listByCustomer(id, limit)));
+                PaymentsByCustomerResponse.of(id.value(), paymentsQueryService.listByCustomer(id, limit)));
     }
 }

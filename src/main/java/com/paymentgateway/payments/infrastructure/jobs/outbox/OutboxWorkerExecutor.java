@@ -1,8 +1,8 @@
 package com.paymentgateway.payments.infrastructure.jobs.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
-import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.infrastructure.bank.BankClient;
 import com.paymentgateway.payments.infrastructure.bank.model.BankCaptureRequest;
@@ -14,10 +14,15 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OutboxWorkerExecutor {
+
+    private static final Logger log = LoggerFactory.getLogger(OutboxWorkerExecutor.class);
+
     private static final int DEFAULT_BATCH_SIZE = 20;
     private static final Duration DEFAULT_RETRY_DELAY = Duration.ofSeconds(30);
 
@@ -47,6 +52,9 @@ public class OutboxWorkerExecutor {
     public int processBatch(int limit) {
         Instant now = Instant.now(clock);
         List<OutboxEvent> leased = outboxEventRepository.leaseReadyEvents(now, limit);
+        if (!leased.isEmpty()) {
+            log.info("Processing outbox batch size={}", leased.size());
+        }
         leased.forEach(this::processLeasedEvent);
         return leased.size();
     }
@@ -56,8 +64,18 @@ public class OutboxWorkerExecutor {
         try {
             executeBankAndComplete(event);
             outboxEventRepository.markProcessed(event.getEventId(), now);
+            log.info(
+                    "Outbox event processed eventId={} action={} paymentRef={}",
+                    event.getEventId(),
+                    event.getAction(),
+                    event.getPaymentRef().value());
         } catch (BankClientException ex) {
             if (ex.getDetails().category() == BankErrorCategory.TRANSIENT) {
+                log.warn(
+                        "Outbox transient bank failure eventId={} code={} nextRetryIn={}s",
+                        event.getEventId(),
+                        ex.getDetails().code(),
+                        DEFAULT_RETRY_DELAY.toSeconds());
                 Instant nextAttemptAt = now.plus(DEFAULT_RETRY_DELAY);
                 outboxEventRepository.markRetryableFailure(
                         event.getEventId(),
@@ -67,18 +85,30 @@ public class OutboxWorkerExecutor {
                         now);
                 return;
             }
+            log.error(
+                    "Outbox terminal bank failure eventId={} code={} message={}",
+                    event.getEventId(),
+                    ex.getDetails().code(),
+                    ex.getDetails().message());
             outboxEventRepository.markTerminalFailure(
                     event.getEventId(),
                     ex.getDetails().code(),
                     ex.getDetails().message(),
                     now);
         } catch (OutboxPayloadException ex) {
+            log.error("Outbox invalid payload eventId={}: {}", event.getEventId(), ex.getMessage());
             outboxEventRepository.markTerminalFailure(
                     event.getEventId(), "invalid_outbox_payload", ex.getMessage(), now);
         } catch (IllegalArgumentException ex) {
+            log.error("Outbox unsupported event type eventId={}: {}", event.getEventId(), ex.getMessage());
             outboxEventRepository.markTerminalFailure(
                     event.getEventId(), "unsupported_outbox_event_type", ex.getMessage(), now);
         } catch (Exception ex) {
+            log.warn(
+                    "Outbox worker error eventId={}: {}",
+                    event.getEventId(),
+                    ex.getMessage(),
+                    ex);
             Instant nextAttemptAt = now.plus(DEFAULT_RETRY_DELAY);
             outboxEventRepository.markRetryableFailure(
                     event.getEventId(),
@@ -91,22 +121,22 @@ public class OutboxWorkerExecutor {
 
     private void executeBankAndComplete(OutboxEvent event) {
         String bankIdempotencyKey = buildBankIdempotencyKey(event);
-        switch (event.getEventType()) {
-            case PAYMENT_AUTHORIZE_REQUESTED -> throw new IllegalArgumentException(
-                    "PAYMENT_AUTHORIZE_REQUESTED outbox events are no longer supported; authorization is synchronous.");
-            case PAYMENT_CAPTURE_REQUESTED -> {
+        switch (event.getAction()) {
+            case AUTHORIZE -> throw new IllegalArgumentException(
+                    "AUTHORIZE outbox events are no longer supported; authorization is synchronous.");
+            case CAPTURE -> {
                 CaptureOutboxPayload payload = readPayload(event.getPayload(), CaptureOutboxPayload.class);
                 var response = bankClient.capture(
                         new BankCaptureRequest(payload.authorizationId(), payload.amountCents(), payload.currency()),
                         bankIdempotencyKey);
                 outboxBankCompletionPort.recordCapture(event.getPaymentRef(), response);
             }
-            case PAYMENT_VOID_REQUESTED -> {
+            case VOID -> {
                 VoidOutboxPayload payload = readPayload(event.getPayload(), VoidOutboxPayload.class);
                 var response = bankClient.voidAuthorization(new BankVoidRequest(payload.authorizationId()), bankIdempotencyKey);
                 outboxBankCompletionPort.recordVoid(event.getPaymentRef(), response);
             }
-            case PAYMENT_REFUND_REQUESTED -> {
+            case REFUND -> {
                 RefundOutboxPayload payload = readPayload(event.getPayload(), RefundOutboxPayload.class);
                 var response = bankClient.refund(
                         new BankRefundRequest(payload.captureId(), payload.amountCents(), payload.currency()),
@@ -125,6 +155,11 @@ public class OutboxWorkerExecutor {
     }
 
     private String buildBankIdempotencyKey(OutboxEvent event) {
-        return "bank:" + event.getPaymentRef().value() + ":" + event.getEventType().name().toLowerCase() + ":" + event.getEventId();
+        return "bank:"
+                + event.getPaymentRef().value()
+                + ":"
+                + event.getAction().bankIdempotencySegment()
+                + ":"
+                + event.getEventId();
     }
 }

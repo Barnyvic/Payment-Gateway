@@ -6,7 +6,7 @@ import com.github.f4b6a3.uuid.UuidCreator;
 import com.paymentgateway.AbstractPostgresIntegrationTest;
 import com.paymentgateway.gateway.PaymentGatewayApplication;
 import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
-import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.outbox.model.OutboxStatus;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.domain.value.PaymentRef;
@@ -40,7 +40,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent event = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 paymentRef,
-                OutboxEventType.PAYMENT_AUTHORIZE_REQUESTED,
+                PaymentAction.AUTHORIZE,
                 "{\"amount\":5000}",
                 now);
 
@@ -48,7 +48,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
 
         assertThat(saved.getStatus()).isEqualTo(OutboxStatus.PENDING);
         assertThat(saved.getAttemptCount()).isZero();
-        assertThat(saved.getEventType()).isEqualTo(OutboxEventType.PAYMENT_AUTHORIZE_REQUESTED);
+        assertThat(saved.getAction()).isEqualTo(PaymentAction.AUTHORIZE);
         assertThat(saved.getPayload()).isEqualTo("{\"amount\":5000}");
 
         assertThat(repository.findById(saved.getEventId())).hasValueSatisfying(found -> {
@@ -66,13 +66,13 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent due = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                PaymentAction.CAPTURE,
                 "{\"step\":\"due\"}",
                 now.minusSeconds(30));
         OutboxEvent future = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_VOID_REQUESTED,
+                PaymentAction.VOID,
                 "{\"step\":\"future\"}",
                 now.plusSeconds(300));
 
@@ -92,7 +92,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent event = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                PaymentAction.CAPTURE,
                 "{\"op\":\"capture\"}",
                 now.minusSeconds(1));
         repository.save(event);
@@ -114,7 +114,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent event = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_REFUND_REQUESTED,
+                PaymentAction.REFUND,
                 "{\"op\":\"refund\"}",
                 now.minusSeconds(10));
         repository.save(event);
@@ -139,7 +139,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent event = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_VOID_REQUESTED,
+                PaymentAction.VOID,
                 "{\"op\":\"void\"}",
                 now.minusSeconds(10));
         repository.save(event);
@@ -165,7 +165,7 @@ class OutboxEventRepositoryIntegrationTest extends AbstractPostgresIntegrationTe
         OutboxEvent event = OutboxEvent.enqueue(
                 UuidCreator.getTimeOrderedEpoch(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                PaymentAction.CAPTURE,
                 "{\"op\":\"capture\"}",
                 now.minusSeconds(10));
         repository.save(event);

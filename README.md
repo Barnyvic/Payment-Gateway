@@ -20,6 +20,16 @@ PCI-minded rules implemented in this service:
 
 Capture, void, and refund continue to use the outbox asynchronously with bank tokens (`authorizationId` / `captureId`) only.
 
+## Logging
+
+The app uses **SLF4J** (the standard Java logging facade) with **Logback** via Spring Boot. Configure levels in `application.properties`, for example:
+
+```properties
+logging.level.com.paymentgateway=DEBUG
+```
+
+Log lines are passed through `SensitiveDataSanitizer` (see `logback-spring.xml`) to mask PAN and CVV patterns.
+
 ## Tests
 
 ```bash

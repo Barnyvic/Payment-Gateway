@@ -1,25 +1,24 @@
 package com.paymentgateway.payments.domain.exception;
 
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.model.PaymentState;
-import com.paymentgateway.payments.domain.model.PaymentCommand;
 
 public final class InvalidPaymentTransitionException extends RuntimeException {
 
     private final PaymentState currentState;
-    private final PaymentCommand attemptedCommand;
+    private final PaymentAction attemptedAction;
 
-    public InvalidPaymentTransitionException(
-            PaymentState currentState, PaymentCommand attemptedCommand) {
-        super("Cannot execute " + attemptedCommand + " in state " + currentState);
+    public InvalidPaymentTransitionException(PaymentState currentState, PaymentAction attemptedAction) {
+        super("Cannot execute " + attemptedAction + " in state " + currentState);
         this.currentState = currentState;
-        this.attemptedCommand = attemptedCommand;
+        this.attemptedAction = attemptedAction;
     }
 
     public PaymentState getCurrentState() {
         return currentState;
     }
 
-    public PaymentCommand getAttemptedCommand() {
-        return attemptedCommand;
+    public PaymentAction getAttemptedAction() {
+        return attemptedAction;
     }
 }

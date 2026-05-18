@@ -8,7 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
-import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.outbox.model.OutboxStatus;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
 import com.paymentgateway.payments.domain.value.PaymentRef;
@@ -55,7 +55,7 @@ class OutboxWorkerExecutorTest {
         OutboxEvent event = OutboxEvent.rehydrate(
                 UUID.randomUUID(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_AUTHORIZE_REQUESTED,
+                PaymentAction.AUTHORIZE,
                 """
                 {"cardNumber":"4111111111111111","cvv":"123","expiryMonth":"12","expiryYear":"2030","amountCents":5000,"currency":"USD"}
                 """,
@@ -71,7 +71,7 @@ class OutboxWorkerExecutorTest {
         verify(outboxEventRepository).markTerminalFailure(
                 eq(event.getEventId()),
                 eq("unsupported_outbox_event_type"),
-                org.mockito.ArgumentMatchers.contains("PAYMENT_AUTHORIZE_REQUESTED"),
+                org.mockito.ArgumentMatchers.contains("AUTHORIZE"),
                 eq(Instant.parse("2026-05-09T12:00:00Z")));
         verify(bankClient, never()).authorize(any(), any());
         verify(outboxBankCompletionPort, never())
@@ -84,7 +84,7 @@ class OutboxWorkerExecutorTest {
         OutboxEvent event = OutboxEvent.rehydrate(
                 UUID.randomUUID(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                PaymentAction.CAPTURE,
                 """
                 {"authorizationId":"auth_123","amountCents":5000,"currency":"USD"}
                 """,
@@ -115,7 +115,7 @@ class OutboxWorkerExecutorTest {
         OutboxEvent event = OutboxEvent.rehydrate(
                 UUID.randomUUID(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_VOID_REQUESTED,
+                PaymentAction.VOID,
                 """
                 {"authorizationId":"auth_123"}
                 """,
@@ -144,7 +144,7 @@ class OutboxWorkerExecutorTest {
         OutboxEvent event = OutboxEvent.rehydrate(
                 UUID.randomUUID(),
                 PaymentRef.generate(),
-                OutboxEventType.PAYMENT_CAPTURE_REQUESTED,
+                PaymentAction.CAPTURE,
                 "{\"authorizationId\":}",
                 OutboxStatus.IN_PROGRESS,
                 1,

@@ -17,6 +17,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -30,6 +32,9 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Component
 public class BankHttpClient implements BankClient {
+
+    private static final Logger log = LoggerFactory.getLogger(BankHttpClient.class);
+
     private final RestClient restClient;
     private final BankErrorMapper errorMapper;
 
@@ -69,6 +74,7 @@ public class BankHttpClient implements BankClient {
     }
 
     private <T> T doPost(String path, Object requestBody, String idempotencyKey, Class<T> responseType) {
+        log.debug("Bank POST {} idempotencyKey={}", path, idempotencyKey);
         try {
             T response = restClient
                     .post()
@@ -87,11 +93,18 @@ public class BankHttpClient implements BankClient {
                         BankErrorCategory.TRANSIENT,
                         true));
             }
+            log.debug("Bank POST {} succeeded", path);
             return response;
         } catch (RestClientResponseException ex) {
             BankErrorDetails error = errorMapper.map(ex.getStatusCode(), ex.getResponseBodyAsString());
+            log.warn(
+                    "Bank POST {} failed status={} code={}",
+                    path,
+                    ex.getStatusCode().value(),
+                    error.code());
             throw new BankClientException(error);
         } catch (ResourceAccessException ex) {
+            log.warn("Bank POST {} unreachable: {}", path, ex.getMessage());
             throw new BankClientException(classifyResourceAccessException(ex));
         }
     }

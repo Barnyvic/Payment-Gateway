@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.paymentgateway.payments.domain.idempotency.exception.IdempotencyConflictException;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyRecord;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyStatus;
-import com.paymentgateway.payments.domain.idempotency.model.PaymentOperation;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import java.time.Instant;
 import java.util.UUID;
@@ -21,7 +21,7 @@ class IdempotencyRecordTest {
         IdempotencyRecord record =
                 IdempotencyRecord.accepted(
                         UUID.randomUUID(),
-                        PaymentOperation.AUTHORIZE,
+                        PaymentAction.AUTHORIZE,
                         "key-a",
                         "hash-a",
                         ref,
@@ -37,7 +37,7 @@ class IdempotencyRecordTest {
     void acceptAsyncCommand_transitionsToAccepted() {
         Instant now = Instant.parse("2026-05-08T20:00:00Z");
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.AUTHORIZE, "key-ac", "hash-ac", now);
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.AUTHORIZE, "key-ac", "hash-ac", now);
         PaymentRef ref = PaymentRef.generate();
         Instant done = Instant.parse("2026-05-08T20:00:01Z");
 
@@ -53,7 +53,7 @@ class IdempotencyRecordTest {
     void start_setsInProgressAndTimestamps() {
         Instant now = Instant.parse("2026-05-08T20:00:00Z");
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.AUTHORIZE, "key-1", "hash-1", now);
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.AUTHORIZE, "key-1", "hash-1", now);
 
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.IN_PROGRESS);
         assertThat(record.getCreatedAt()).isEqualTo(now);
@@ -65,7 +65,7 @@ class IdempotencyRecordTest {
     @Test
     void ensureRequestHashMatches_allowsSameHash() {
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.CAPTURE, "key-2", "hash-2", Instant.now());
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.CAPTURE, "key-2", "hash-2", Instant.now());
 
         record.ensureRequestHashMatches("hash-2");
     }
@@ -73,7 +73,7 @@ class IdempotencyRecordTest {
     @Test
     void ensureRequestHashMatches_throwsOnMismatch() {
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.REFUND, "key-3", "hash-3", Instant.now());
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.REFUND, "key-3", "hash-3", Instant.now());
 
         assertThatThrownBy(() -> record.ensureRequestHashMatches("another-hash"))
                 .isInstanceOf(IdempotencyConflictException.class)
@@ -83,7 +83,7 @@ class IdempotencyRecordTest {
     @Test
     void markSucceeded_storesResponseAndPaymentRef() {
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.AUTHORIZE, "key-4", "hash-4", Instant.now());
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.AUTHORIZE, "key-4", "hash-4", Instant.now());
         PaymentRef paymentRef = PaymentRef.generate();
         Instant doneAt = Instant.parse("2026-05-08T20:05:00Z");
 
@@ -98,7 +98,7 @@ class IdempotencyRecordTest {
     @Test
     void markFailed_storesFailureSnapshot() {
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.VOID, "key-5", "hash-5", Instant.now());
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.VOID, "key-5", "hash-5", Instant.now());
         Instant failedAt = Instant.parse("2026-05-08T20:10:00Z");
 
         record.markFailed("{\"error\":\"timeout\"}", failedAt);
@@ -111,7 +111,7 @@ class IdempotencyRecordTest {
     @Test
     void markSucceeded_failsWhenAlreadyTerminal() {
         IdempotencyRecord record =
-                IdempotencyRecord.start(UUID.randomUUID(), PaymentOperation.VOID, "key-6", "hash-6", Instant.now());
+                IdempotencyRecord.start(UUID.randomUUID(), PaymentAction.VOID, "key-6", "hash-6", Instant.now());
         record.markFailed("{\"error\":\"declined\"}", Instant.now());
 
         assertThatThrownBy(() -> record.markSucceeded("{\"ok\":true}", PaymentRef.generate(), Instant.now()))
@@ -127,7 +127,7 @@ class IdempotencyRecordTest {
         assertThatThrownBy(() ->
                         IdempotencyRecord.rehydrate(
                                 UUID.randomUUID(),
-                                PaymentOperation.AUTHORIZE,
+                                PaymentAction.AUTHORIZE,
                                 "key-7",
                                 "hash-7",
                                 IdempotencyStatus.IN_PROGRESS,
@@ -146,7 +146,7 @@ class IdempotencyRecordTest {
         assertThatThrownBy(() ->
                         IdempotencyRecord.rehydrate(
                                 UUID.randomUUID(),
-                                PaymentOperation.AUTHORIZE,
+                                PaymentAction.AUTHORIZE,
                                 "key-8",
                                 "hash-8",
                                 IdempotencyStatus.SUCCEEDED,

@@ -1,5 +1,6 @@
 package com.paymentgateway.payments.domain.model;
 
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
 import com.paymentgateway.payments.domain.value.CustomerId;
 import com.paymentgateway.payments.domain.value.Money;
@@ -43,19 +44,19 @@ public final class Payment {
     }
 
     public void authorize() {
-        transition(PaymentCommand.AUTHORIZE);
+        transition(PaymentAction.AUTHORIZE);
     }
 
     public void capture() {
-        transition(PaymentCommand.CAPTURE);
+        transition(PaymentAction.CAPTURE);
     }
 
     public void voidAuthorization() {
-        transition(PaymentCommand.VOID);
+        transition(PaymentAction.VOID);
     }
 
     public void refund() {
-        transition(PaymentCommand.REFUND);
+        transition(PaymentAction.REFUND);
     }
 
     public PaymentRef getPaymentRef() {
@@ -78,10 +79,10 @@ public final class Payment {
         return state;
     }
 
-    private void transition(PaymentCommand command) {
+    private void transition(PaymentAction action) {
         PaymentState current = this.state;
         this.state = current
-                .resolveTransition(command)
-                .orElseThrow(() -> new InvalidPaymentTransitionException(current, command));
+                .resolveTransition(action)
+                .orElseThrow(() -> new InvalidPaymentTransitionException(current, action));
     }
 }

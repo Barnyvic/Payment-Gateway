@@ -1,5 +1,6 @@
 package com.paymentgateway.payments.domain.model;
 
+import com.paymentgateway.common.util.PaymentAction;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
@@ -11,34 +12,34 @@ public enum PaymentState {
     REFUNDED,
     VOIDED;
 
-    private static final Map<PaymentState, Map<PaymentCommand, PaymentState>> TRANSITIONS = buildTransitionTable();
+    private static final Map<PaymentState, Map<PaymentAction, PaymentState>> TRANSITIONS = buildTransitionTable();
 
-    public Optional<PaymentState> resolveTransition(PaymentCommand command) {
-        Map<PaymentCommand, PaymentState> row = TRANSITIONS.get(this);
+    public Optional<PaymentState> resolveTransition(PaymentAction action) {
+        Map<PaymentAction, PaymentState> row = TRANSITIONS.get(this);
         if (row == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(row.get(command));
+        return Optional.ofNullable(row.get(action));
     }
 
-    private static Map<PaymentState, Map<PaymentCommand, PaymentState>> buildTransitionTable() {
-        Map<PaymentState, Map<PaymentCommand, PaymentState>> table = new EnumMap<>(PaymentState.class);
+    private static Map<PaymentState, Map<PaymentAction, PaymentState>> buildTransitionTable() {
+        Map<PaymentState, Map<PaymentAction, PaymentState>> table = new EnumMap<>(PaymentState.class);
 
-        Map<PaymentCommand, PaymentState> pending = new EnumMap<>(PaymentCommand.class);
-        pending.put(PaymentCommand.AUTHORIZE, AUTHORIZED);
+        Map<PaymentAction, PaymentState> pending = new EnumMap<>(PaymentAction.class);
+        pending.put(PaymentAction.AUTHORIZE, AUTHORIZED);
         table.put(PENDING, pending);
 
-        Map<PaymentCommand, PaymentState> authorized = new EnumMap<>(PaymentCommand.class);
-        authorized.put(PaymentCommand.CAPTURE, CAPTURED);
-        authorized.put(PaymentCommand.VOID, VOIDED);
+        Map<PaymentAction, PaymentState> authorized = new EnumMap<>(PaymentAction.class);
+        authorized.put(PaymentAction.CAPTURE, CAPTURED);
+        authorized.put(PaymentAction.VOID, VOIDED);
         table.put(AUTHORIZED, authorized);
 
-        Map<PaymentCommand, PaymentState> captured = new EnumMap<>(PaymentCommand.class);
-        captured.put(PaymentCommand.REFUND, REFUNDED);
+        Map<PaymentAction, PaymentState> captured = new EnumMap<>(PaymentAction.class);
+        captured.put(PaymentAction.REFUND, REFUNDED);
         table.put(CAPTURED, captured);
 
-        table.put(REFUNDED, new EnumMap<>(PaymentCommand.class));
-        table.put(VOIDED, new EnumMap<>(PaymentCommand.class));
+        table.put(REFUNDED, new EnumMap<>(PaymentAction.class));
+        table.put(VOIDED, new EnumMap<>(PaymentAction.class));
 
         return Map.copyOf(table);
     }

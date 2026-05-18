@@ -1,5 +1,6 @@
 package com.paymentgateway.payments.domain.outbox.model;
 
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import java.time.Instant;
 import java.util.Objects;
@@ -9,7 +10,7 @@ public final class OutboxEvent {
 
     private final UUID eventId;
     private final PaymentRef paymentRef;
-    private final OutboxEventType eventType;
+    private final PaymentAction action;
     private final String payload;
     private OutboxStatus status;
     private int attemptCount;
@@ -20,7 +21,7 @@ public final class OutboxEvent {
     private OutboxEvent(
             UUID eventId,
             PaymentRef paymentRef,
-            OutboxEventType eventType,
+            PaymentAction action,
             String payload,
             OutboxStatus status,
             int attemptCount,
@@ -29,7 +30,7 @@ public final class OutboxEvent {
             Instant updatedAt) {
         this.eventId = Objects.requireNonNull(eventId, "eventId");
         this.paymentRef = Objects.requireNonNull(paymentRef, "paymentRef");
-        this.eventType = Objects.requireNonNull(eventType, "eventType");
+        this.action = Objects.requireNonNull(action, "action");
         this.payload = requireNonBlank(payload, "payload");
         this.status = Objects.requireNonNull(status, "status");
         this.attemptCount = attemptCount;
@@ -39,15 +40,15 @@ public final class OutboxEvent {
     }
 
     public static OutboxEvent enqueue(
-            UUID eventId, PaymentRef paymentRef, OutboxEventType eventType, String payload, Instant now) {
+            UUID eventId, PaymentRef paymentRef, PaymentAction action, String payload, Instant now) {
         Instant ts = Objects.requireNonNull(now, "now");
-        return new OutboxEvent(eventId, paymentRef, eventType, payload, OutboxStatus.PENDING, 0, ts, ts, ts);
+        return new OutboxEvent(eventId, paymentRef, action, payload, OutboxStatus.PENDING, 0, ts, ts, ts);
     }
 
     public static OutboxEvent rehydrate(
             UUID eventId,
             PaymentRef paymentRef,
-            OutboxEventType eventType,
+            PaymentAction action,
             String payload,
             OutboxStatus status,
             int attemptCount,
@@ -55,7 +56,7 @@ public final class OutboxEvent {
             Instant createdAt,
             Instant updatedAt) {
         return new OutboxEvent(
-                eventId, paymentRef, eventType, payload, status, attemptCount, nextAttemptAt, createdAt, updatedAt);
+                eventId, paymentRef, action, payload, status, attemptCount, nextAttemptAt, createdAt, updatedAt);
     }
 
     public UUID getEventId() {
@@ -66,8 +67,8 @@ public final class OutboxEvent {
         return paymentRef;
     }
 
-    public OutboxEventType getEventType() {
-        return eventType;
+    public PaymentAction getAction() {
+        return action;
     }
 
     public String getPayload() {

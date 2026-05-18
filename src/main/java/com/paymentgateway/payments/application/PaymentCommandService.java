@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.paymentgateway.payments.application.exception.PaymentAuthorizationException;
 import com.paymentgateway.payments.application.port.PaymentAuthorizationPort;
+import com.paymentgateway.common.util.PaymentRequestHasher;
 import com.paymentgateway.payments.application.port.PaymentAuthorizationPort.AuthorizeBankCommand;
 import com.paymentgateway.payments.domain.exception.IdempotencyInProgressException;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
@@ -12,12 +13,10 @@ import com.paymentgateway.payments.domain.exception.PaymentAwaitingBankException
 import com.paymentgateway.payments.domain.exception.PaymentNotFoundException;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyRecord;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyStatus;
-import com.paymentgateway.payments.domain.idempotency.model.PaymentOperation;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.model.Payment;
-import com.paymentgateway.payments.domain.model.PaymentCommand;
 import com.paymentgateway.payments.domain.model.PaymentState;
 import com.paymentgateway.payments.domain.outbox.model.OutboxEvent;
-import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
 import com.paymentgateway.payments.domain.query.PaymentReceiptRecord;
 import com.paymentgateway.payments.domain.repository.IdempotencyRecordRepository;
 import com.paymentgateway.payments.domain.repository.OutboxEventRepository;
@@ -34,12 +33,16 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PaymentCommandService {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentCommandService.class);
 
     private static final SupportedCurrency GATEWAY_CURRENCY = SupportedCurrency.USD;
 
@@ -70,8 +73,13 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult authorize(String idempotencyKey, AuthorizePaymentCommand body) {
+        log.info(
+                "Authorize requested orderId={} customerId={} amountCents={}",
+                body.orderId(),
+                body.customerId(),
+                body.amountCents());
         String hash = paymentRequestHasher.sha256Hex(toAuthorizeHashPayload(body));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.AUTHORIZE, idempotencyKey, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentAction.AUTHORIZE, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
@@ -79,11 +87,11 @@ public class PaymentCommandService {
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
         IdempotencyRecord idempotency =
-                IdempotencyRecord.start(idempotencyId, PaymentOperation.AUTHORIZE, idempotencyKey, hash, now);
+                IdempotencyRecord.start(idempotencyId, PaymentAction.AUTHORIZE, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.AUTHORIZE, idempotencyKey, hash);
+            return replayAfterConcurrentInsert(PaymentAction.AUTHORIZE, idempotencyKey, hash);
         }
 
         PaymentRef paymentRef = PaymentRef.generate();
@@ -105,10 +113,23 @@ public class PaymentCommandService {
         try {
             var authorizeResult = paymentAuthorizationPort.authorize(bankCommand, bankIdempotencyKey);
             paymentReceiptRepository.recordAuthorizeSuccess(paymentRef, authorizeResult.authorizationId());
+            log.info(
+                    "Authorize succeeded paymentRef={} bankAuthorizationId={}",
+                    paymentRef.value(),
+                    authorizeResult.authorizationId());
         } catch (PaymentAuthorizationException ex) {
             if (ex.isTransientFailure()) {
+                log.warn(
+                        "Authorize failed transiently paymentRef={} code={}",
+                        paymentRef.value(),
+                        ex.getErrorCode());
                 throw ex;
             }
+            log.warn(
+                    "Authorize declined paymentRef={} code={} message={}",
+                    paymentRef.value(),
+                    ex.getErrorCode(),
+                    ex.getMessage());
         }
 
         PaymentState receiptState = paymentReceiptRepository
@@ -118,20 +139,22 @@ public class PaymentCommandService {
         String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), receiptState.name()));
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
         idempotencyRecordRepository.save(idempotency);
+        log.info("Authorize accepted paymentRef={} receiptState={}", paymentRef.value(), receiptState);
         return PaymentCommandDispatchResult.accepted202(acceptanceJson);
     }
 
     @Transactional
     public PaymentCommandDispatchResult capture(String idempotencyKey, PaymentRef paymentRef) {
+        log.info("Capture requested paymentRef={}", paymentRef.value());
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.CAPTURE, idempotencyKey, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentAction.CAPTURE, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
 
         PaymentReceiptRecord receipt = loadReceiptOrThrow(paymentRef);
         if (receipt.state() != PaymentState.AUTHORIZED) {
-            throw new InvalidPaymentTransitionException(receipt.state(), PaymentCommand.CAPTURE);
+            throw new InvalidPaymentTransitionException(receipt.state(), PaymentAction.CAPTURE);
         }
         if (receipt.bankAuthorizationId() == null || receipt.bankAuthorizationId().isBlank()) {
             throw new PaymentAwaitingBankException("Capture is not allowed until authorization completes at the bank.");
@@ -140,17 +163,18 @@ public class PaymentCommandService {
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
         IdempotencyRecord idempotency =
-                IdempotencyRecord.start(idempotencyId, PaymentOperation.CAPTURE, idempotencyKey, hash, now);
+                IdempotencyRecord.start(idempotencyId, PaymentAction.CAPTURE, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.CAPTURE, idempotencyKey, hash);
+            return replayAfterConcurrentInsert(PaymentAction.CAPTURE, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new CaptureOutboxPayload(
                 receipt.bankAuthorizationId(), receipt.amountCents(), receipt.currency().name()));
         UUID eventId = UuidCreator.getTimeOrderedEpoch();
-        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, OutboxEventType.PAYMENT_CAPTURE_REQUESTED, outboxPayload, now));
+        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, PaymentAction.CAPTURE, outboxPayload, now));
+        log.info("Capture outbox enqueued paymentRef={} eventId={}", paymentRef.value(), eventId);
 
         String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), PaymentState.AUTHORIZED.name()));
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
@@ -160,15 +184,16 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult voidPayment(String idempotencyKey, PaymentRef paymentRef) {
+        log.info("Void requested paymentRef={}", paymentRef.value());
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.VOID, idempotencyKey, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentAction.VOID, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
 
         PaymentReceiptRecord receipt = loadReceiptOrThrow(paymentRef);
         if (receipt.state() != PaymentState.AUTHORIZED) {
-            throw new InvalidPaymentTransitionException(receipt.state(), PaymentCommand.VOID);
+            throw new InvalidPaymentTransitionException(receipt.state(), PaymentAction.VOID);
         }
         if (receipt.bankAuthorizationId() == null || receipt.bankAuthorizationId().isBlank()) {
             throw new PaymentAwaitingBankException("Void is not allowed until authorization completes at the bank.");
@@ -177,16 +202,17 @@ public class PaymentCommandService {
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
         IdempotencyRecord idempotency =
-                IdempotencyRecord.start(idempotencyId, PaymentOperation.VOID, idempotencyKey, hash, now);
+                IdempotencyRecord.start(idempotencyId, PaymentAction.VOID, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.VOID, idempotencyKey, hash);
+            return replayAfterConcurrentInsert(PaymentAction.VOID, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new VoidOutboxPayload(receipt.bankAuthorizationId()));
         UUID eventId = UuidCreator.getTimeOrderedEpoch();
-        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, OutboxEventType.PAYMENT_VOID_REQUESTED, outboxPayload, now));
+        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, PaymentAction.VOID, outboxPayload, now));
+        log.info("Void outbox enqueued paymentRef={} eventId={}", paymentRef.value(), eventId);
 
         String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), PaymentState.AUTHORIZED.name()));
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
@@ -196,15 +222,16 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult refund(String idempotencyKey, PaymentRef paymentRef) {
+        log.info("Refund requested paymentRef={}", paymentRef.value());
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.REFUND, idempotencyKey, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentAction.REFUND, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
 
         PaymentReceiptRecord receipt = loadReceiptOrThrow(paymentRef);
         if (receipt.state() != PaymentState.CAPTURED) {
-            throw new InvalidPaymentTransitionException(receipt.state(), PaymentCommand.REFUND);
+            throw new InvalidPaymentTransitionException(receipt.state(), PaymentAction.REFUND);
         }
         if (receipt.bankCaptureId() == null || receipt.bankCaptureId().isBlank()) {
             throw new PaymentAwaitingBankException("Refund is not allowed until capture completes at the bank.");
@@ -213,17 +240,18 @@ public class PaymentCommandService {
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
         IdempotencyRecord idempotency =
-                IdempotencyRecord.start(idempotencyId, PaymentOperation.REFUND, idempotencyKey, hash, now);
+                IdempotencyRecord.start(idempotencyId, PaymentAction.REFUND, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.REFUND, idempotencyKey, hash);
+            return replayAfterConcurrentInsert(PaymentAction.REFUND, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new RefundOutboxPayload(
                 receipt.bankCaptureId(), receipt.amountCents(), receipt.currency().name()));
         UUID eventId = UuidCreator.getTimeOrderedEpoch();
-        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, OutboxEventType.PAYMENT_REFUND_REQUESTED, outboxPayload, now));
+        outboxEventRepository.save(OutboxEvent.enqueue(eventId, paymentRef, PaymentAction.REFUND, outboxPayload, now));
+        log.info("Refund outbox enqueued paymentRef={} eventId={}", paymentRef.value(), eventId);
 
         String acceptanceJson = writeJson(new AsyncCommandAcceptedBody(paymentRef.value(), PaymentState.CAPTURED.name()));
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
@@ -237,7 +265,7 @@ public class PaymentCommandService {
                 .orElseThrow(() -> new PaymentNotFoundException(paymentRef));
     }
 
-    private Optional<PaymentCommandDispatchResult> tryReplay(PaymentOperation operation, String idempotencyKey, String requestHash) {
+    private Optional<PaymentCommandDispatchResult> tryReplay(PaymentAction operation, String idempotencyKey, String requestHash) {
         return idempotencyRecordRepository
                 .findByOperationAndKey(operation, idempotencyKey)
                 .map(record -> replayAfterVerify(record, requestHash));
@@ -249,10 +277,14 @@ public class PaymentCommandService {
             throw new IdempotencyInProgressException(record.getOperation(), record.getIdempotencyKey());
         }
         String snapshot = record.getResponseSnapshot().orElse("{}");
+        log.debug(
+                "Idempotent replay operation={} idempotencyKey={}",
+                record.getOperation(),
+                record.getIdempotencyKey());
         return PaymentCommandDispatchResult.replayed200(snapshot);
     }
 
-    private PaymentCommandDispatchResult replayAfterConcurrentInsert(PaymentOperation operation, String idempotencyKey, String requestHash) {
+    private PaymentCommandDispatchResult replayAfterConcurrentInsert(PaymentAction operation, String idempotencyKey, String requestHash) {
         return idempotencyRecordRepository
                 .findByOperationAndKey(operation, idempotencyKey)
                 .map(record -> replayAfterVerify(record, requestHash))
@@ -303,4 +335,20 @@ public class PaymentCommandService {
     public record CardPayload(String number, String cvv, String expiryMonth, String expiryYear) {}
 
     public record AsyncCommandAcceptedBody(UUID paymentRef, String receiptStateAtEnqueue) {}
+
+    public record PaymentCommandDispatchResult(Type type, String responseBodyJson) {
+
+        public enum Type {
+            ACCEPTED_202,
+            REPLAYED_200
+        }
+
+        public static PaymentCommandDispatchResult accepted202(String responseBodyJson) {
+            return new PaymentCommandDispatchResult(Type.ACCEPTED_202, responseBodyJson);
+        }
+
+        public static PaymentCommandDispatchResult replayed200(String responseBodyJson) {
+            return new PaymentCommandDispatchResult(Type.REPLAYED_200, responseBodyJson);
+        }
+    }
 }

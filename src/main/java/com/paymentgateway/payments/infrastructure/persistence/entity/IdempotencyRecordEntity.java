@@ -2,7 +2,7 @@ package com.paymentgateway.payments.infrastructure.persistence.entity;
 
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyStatus;
-import com.paymentgateway.payments.domain.idempotency.model.PaymentOperation;
+import com.paymentgateway.common.util.PaymentAction;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -38,7 +38,7 @@ public class IdempotencyRecordEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "operation", nullable = false, length = 32)
-    private PaymentOperation operation;
+    private PaymentAction operation;
 
     @Column(name = "idempotency_key", nullable = false, length = 255)
     private String idempotencyKey;

@@ -24,7 +24,7 @@ public final class OutboxEventMapper {
     public static void merge(OutboxEvent outboxEvent, OutboxEventEntity entity) {
         entity.setEventId(outboxEvent.getEventId());
         entity.setPaymentRef(outboxEvent.getPaymentRef().value());
-        entity.setEventType(outboxEvent.getEventType());
+        entity.setEventType(outboxEvent.getAction());
         entity.setPayload(outboxEvent.getPayload());
         entity.setStatus(outboxEvent.getStatus());
         entity.setAttemptCount(outboxEvent.getAttemptCount());

@@ -1,4 +1,4 @@
-package com.paymentgateway.payments.application;
+package com.paymentgateway.common.util;
 
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;

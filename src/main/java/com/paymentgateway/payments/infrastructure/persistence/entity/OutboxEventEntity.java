@@ -1,8 +1,10 @@
 package com.paymentgateway.payments.infrastructure.persistence.entity;
 
-import com.paymentgateway.payments.domain.outbox.model.OutboxEventType;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.outbox.model.OutboxStatus;
+import com.paymentgateway.payments.infrastructure.persistence.converter.PaymentActionOutboxConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -33,9 +35,9 @@ public class OutboxEventEntity {
     @Column(name = "payment_ref", nullable = false)
     private UUID paymentRef;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = PaymentActionOutboxConverter.class)
     @Column(name = "event_type", nullable = false, length = 64)
-    private OutboxEventType eventType;
+    private PaymentAction eventType;
 
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;

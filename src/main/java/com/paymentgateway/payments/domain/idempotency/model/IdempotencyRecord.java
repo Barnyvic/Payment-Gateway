@@ -1,5 +1,6 @@
 package com.paymentgateway.payments.domain.idempotency.model;
 
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.idempotency.exception.IdempotencyConflictException;
 import com.paymentgateway.payments.domain.value.PaymentRef;
 import java.time.Instant;
@@ -10,7 +11,7 @@ import java.util.UUID;
 public final class IdempotencyRecord {
 
     private final UUID id;
-    private final PaymentOperation operation;
+    private final PaymentAction operation;
     private final String idempotencyKey;
     private final String requestHash;
     private IdempotencyStatus status;
@@ -21,7 +22,7 @@ public final class IdempotencyRecord {
 
     private IdempotencyRecord(
             UUID id,
-            PaymentOperation operation,
+            PaymentAction operation,
             String idempotencyKey,
             String requestHash,
             IdempotencyStatus status,
@@ -42,19 +43,15 @@ public final class IdempotencyRecord {
     }
 
     public static IdempotencyRecord start(
-            UUID id, PaymentOperation operation, String idempotencyKey, String requestHash, Instant now) {
+            UUID id, PaymentAction operation, String idempotencyKey, String requestHash, Instant now) {
         Instant ts = Objects.requireNonNull(now, "now");
         return new IdempotencyRecord(
                 id, operation, idempotencyKey, requestHash, IdempotencyStatus.IN_PROGRESS, null, null, ts, ts);
     }
 
-    /**
-     * Record created when an async command is fully persisted (receipt + outbox) and the HTTP acceptance body
-     * should be replayed for duplicate requests with the same idempotency key and payload hash.
-     */
     public static IdempotencyRecord accepted(
             UUID id,
-            PaymentOperation operation,
+            PaymentAction operation,
             String idempotencyKey,
             String requestHash,
             PaymentRef paymentRef,
@@ -75,7 +72,7 @@ public final class IdempotencyRecord {
 
     public static IdempotencyRecord rehydrate(
             UUID id,
-            PaymentOperation operation,
+            PaymentAction operation,
             String idempotencyKey,
             String requestHash,
             IdempotencyStatus status,
@@ -93,10 +90,6 @@ public final class IdempotencyRecord {
         }
     }
 
-    /**
-     * Completes an outbox-first command: receipt and outbox rows are persisted, store the HTTP acceptance snapshot
-     * for deterministic idempotent replay.
-     */
     public void acceptAsyncCommand(PaymentRef paymentRef, String responseSnapshot, Instant now) {
         requireInProgressTransition("acceptAsyncCommand");
         this.status = IdempotencyStatus.ACCEPTED;
@@ -125,7 +118,7 @@ public final class IdempotencyRecord {
         return id;
     }
 
-    public PaymentOperation getOperation() {
+    public PaymentAction getOperation() {
         return operation;
     }
 

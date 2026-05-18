@@ -1,7 +1,7 @@
 package com.paymentgateway.payments.infrastructure.persistence.repository;
 
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyRecord;
-import com.paymentgateway.payments.domain.idempotency.model.PaymentOperation;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.repository.IdempotencyRecordRepository;
 import com.paymentgateway.payments.infrastructure.persistence.entity.IdempotencyRecordEntity;
 import com.paymentgateway.payments.infrastructure.persistence.mapper.IdempotencyRecordMapper;
@@ -28,7 +28,7 @@ public class IdempotencyRecordRepositoryAdapter implements IdempotencyRecordRepo
     }
 
     @Override
-    public Optional<IdempotencyRecord> findByOperationAndKey(PaymentOperation operation, String idempotencyKey) {
+    public Optional<IdempotencyRecord> findByOperationAndKey(PaymentAction operation, String idempotencyKey) {
         return jpa.findByOperationAndIdempotencyKey(operation, idempotencyKey).map(IdempotencyRecordMapper::toDomain);
     }
 

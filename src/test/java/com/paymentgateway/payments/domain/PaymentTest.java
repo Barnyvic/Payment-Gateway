@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
-import com.paymentgateway.payments.domain.model.PaymentCommand;
+import com.paymentgateway.common.util.PaymentAction;
 import com.paymentgateway.payments.domain.model.Payment;
 import com.paymentgateway.payments.domain.model.PaymentState;
 import com.paymentgateway.payments.domain.value.CustomerId;
@@ -44,7 +44,7 @@ class PaymentTest {
                 .satisfies(ex -> {
                     InvalidPaymentTransitionException e = (InvalidPaymentTransitionException) ex;
                     assertThat(e.getCurrentState()).isEqualTo(PaymentState.PENDING);
-                    assertThat(e.getAttemptedCommand()).isEqualTo(PaymentCommand.CAPTURE);
+                    assertThat(e.getAttemptedAction()).isEqualTo(PaymentAction.CAPTURE);
                 });
     }
 

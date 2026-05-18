@@ -1,19 +1,19 @@
 package com.paymentgateway.payments.domain.exception;
 
-import com.paymentgateway.payments.domain.idempotency.model.PaymentOperation;
+import com.paymentgateway.common.util.PaymentAction;
 
 public class IdempotencyInProgressException extends RuntimeException {
 
-    private final PaymentOperation operation;
+    private final PaymentAction operation;
     private final String idempotencyKey;
 
-    public IdempotencyInProgressException(PaymentOperation operation, String idempotencyKey) {
+    public IdempotencyInProgressException(PaymentAction operation, String idempotencyKey) {
         super("Idempotency record still in progress for operation " + operation + " and key " + idempotencyKey);
         this.operation = operation;
         this.idempotencyKey = idempotencyKey;
     }
 
-    public PaymentOperation getOperation() {
+    public PaymentAction getOperation() {
         return operation;
     }
 
