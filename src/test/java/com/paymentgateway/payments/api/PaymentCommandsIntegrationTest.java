@@ -73,6 +73,34 @@ class PaymentCommandsIntegrationTest extends AbstractPostgresIntegrationTest {
     }
 
     @Test
+    void authorize_invalidBody_returns400() throws Exception {
+        String body =
+                """
+                {"orderId":"","customerId":"cust-z","card":{"number":"4111111111111111","cvv":"123","expiryMonth":"12","expiryYear":"2030"},"amountCents":0}
+                """;
+        mockMvc.perform(post("/v1/payments/authorize")
+                        .header(PaymentHttpConstants.IDEMPOTENCY_KEY_HEADER, "idem-invalid-body")
+                        .contentType(APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void authorize_blankIdempotencyKey_returns400() throws Exception {
+        String body =
+                """
+                {"orderId":"ord-z","customerId":"cust-z","card":{"number":"4111111111111111","cvv":"123","expiryMonth":"12","expiryYear":"2030"},"amountCents":100}
+                """;
+        mockMvc.perform(post("/v1/payments/authorize")
+                        .header(PaymentHttpConstants.IDEMPOTENCY_KEY_HEADER, "   ")
+                        .contentType(APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MISSING_IDEMPOTENCY_KEY"));
+    }
+
+    @Test
     void authorize_missingIdempotencyKey_returns400() throws Exception {
         String body =
                 """

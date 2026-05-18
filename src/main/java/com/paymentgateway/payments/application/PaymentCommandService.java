@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.f4b6a3.uuid.UuidCreator;
 import com.paymentgateway.payments.domain.exception.IdempotencyInProgressException;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
-import com.paymentgateway.payments.domain.exception.MissingIdempotencyKeyException;
 import com.paymentgateway.payments.domain.exception.PaymentAwaitingBankException;
 import com.paymentgateway.payments.domain.exception.PaymentNotFoundException;
 import com.paymentgateway.payments.domain.idempotency.model.IdempotencyRecord;
@@ -66,21 +65,20 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult authorize(String idempotencyKey, AuthorizePaymentCommand body) {
-        validateAuthorizeBody(body);
-        String key = requireIdempotencyKey(idempotencyKey);
         String hash = paymentRequestHasher.sha256Hex(toAuthorizeHashPayload(body));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.AUTHORIZE, key, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.AUTHORIZE, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
 
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
-        IdempotencyRecord idempotency = IdempotencyRecord.start(idempotencyId, PaymentOperation.AUTHORIZE, key, hash, now);
+        IdempotencyRecord idempotency =
+                IdempotencyRecord.start(idempotencyId, PaymentOperation.AUTHORIZE, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.AUTHORIZE, key, hash);
+            return replayAfterConcurrentInsert(PaymentOperation.AUTHORIZE, idempotencyKey, hash);
         }
 
         PaymentRef paymentRef = PaymentRef.generate();
@@ -110,9 +108,8 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult capture(String idempotencyKey, PaymentRef paymentRef) {
-        String key = requireIdempotencyKey(idempotencyKey);
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.CAPTURE, key, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.CAPTURE, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
@@ -127,11 +124,12 @@ public class PaymentCommandService {
 
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
-        IdempotencyRecord idempotency = IdempotencyRecord.start(idempotencyId, PaymentOperation.CAPTURE, key, hash, now);
+        IdempotencyRecord idempotency =
+                IdempotencyRecord.start(idempotencyId, PaymentOperation.CAPTURE, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.CAPTURE, key, hash);
+            return replayAfterConcurrentInsert(PaymentOperation.CAPTURE, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new CaptureOutboxPayload(
@@ -147,9 +145,8 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult voidPayment(String idempotencyKey, PaymentRef paymentRef) {
-        String key = requireIdempotencyKey(idempotencyKey);
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.VOID, key, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.VOID, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
@@ -164,11 +161,12 @@ public class PaymentCommandService {
 
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
-        IdempotencyRecord idempotency = IdempotencyRecord.start(idempotencyId, PaymentOperation.VOID, key, hash, now);
+        IdempotencyRecord idempotency =
+                IdempotencyRecord.start(idempotencyId, PaymentOperation.VOID, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.VOID, key, hash);
+            return replayAfterConcurrentInsert(PaymentOperation.VOID, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new VoidOutboxPayload(receipt.bankAuthorizationId()));
@@ -183,9 +181,8 @@ public class PaymentCommandService {
 
     @Transactional
     public PaymentCommandDispatchResult refund(String idempotencyKey, PaymentRef paymentRef) {
-        String key = requireIdempotencyKey(idempotencyKey);
         String hash = paymentRequestHasher.sha256Hex(new MutationHashPayload(paymentRef.value().toString()));
-        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.REFUND, key, hash);
+        Optional<PaymentCommandDispatchResult> replay = tryReplay(PaymentOperation.REFUND, idempotencyKey, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
@@ -200,11 +197,12 @@ public class PaymentCommandService {
 
         Instant now = clock.instant();
         UUID idempotencyId = UuidCreator.getTimeOrderedEpoch();
-        IdempotencyRecord idempotency = IdempotencyRecord.start(idempotencyId, PaymentOperation.REFUND, key, hash, now);
+        IdempotencyRecord idempotency =
+                IdempotencyRecord.start(idempotencyId, PaymentOperation.REFUND, idempotencyKey, hash, now);
         try {
             idempotencyRecordRepository.save(idempotency);
         } catch (DataIntegrityViolationException ex) {
-            return replayAfterConcurrentInsert(PaymentOperation.REFUND, key, hash);
+            return replayAfterConcurrentInsert(PaymentOperation.REFUND, idempotencyKey, hash);
         }
 
         String outboxPayload = writeJson(new RefundOutboxPayload(
@@ -216,34 +214,6 @@ public class PaymentCommandService {
         idempotency.acceptAsyncCommand(paymentRef, acceptanceJson, now);
         idempotencyRecordRepository.save(idempotency);
         return PaymentCommandDispatchResult.accepted202(acceptanceJson);
-    }
-
-    private void validateAuthorizeBody(AuthorizePaymentCommand body) {
-        if (body.orderId() == null || body.orderId().isBlank()) {
-            throw new IllegalArgumentException("orderId must be non-blank");
-        }
-        if (body.customerId() == null || body.customerId().isBlank()) {
-            throw new IllegalArgumentException("customerId must be non-blank");
-        }
-        if (body.amountCents() <= 0) {
-            throw new IllegalArgumentException("amountCents must be positive");
-        }
-        CardPayload c = body.card();
-        if (c == null) {
-            throw new IllegalArgumentException("card is required");
-        }
-        if (c.number() == null || c.number().isBlank()) {
-            throw new IllegalArgumentException("card.number must be non-blank");
-        }
-        if (c.cvv() == null || c.cvv().isBlank()) {
-            throw new IllegalArgumentException("card.cvv must be non-blank");
-        }
-        if (c.expiryMonth() == null || c.expiryMonth().isBlank()) {
-            throw new IllegalArgumentException("card.expiryMonth must be non-blank");
-        }
-        if (c.expiryYear() == null || c.expiryYear().isBlank()) {
-            throw new IllegalArgumentException("card.expiryYear must be non-blank");
-        }
     }
 
     private PaymentReceiptRecord loadReceiptOrThrow(PaymentRef paymentRef) {
@@ -272,13 +242,6 @@ public class PaymentCommandService {
                 .findByOperationAndKey(operation, idempotencyKey)
                 .map(record -> replayAfterVerify(record, requestHash))
                 .orElseThrow(() -> new IllegalStateException("Lost race on idempotency insert without readable record"));
-    }
-
-    private static String requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new MissingIdempotencyKeyException();
-        }
-        return idempotencyKey.strip();
     }
 
     private String writeJson(Object value) {

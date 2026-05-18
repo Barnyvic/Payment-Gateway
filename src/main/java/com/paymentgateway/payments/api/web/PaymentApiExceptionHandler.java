@@ -3,13 +3,15 @@ package com.paymentgateway.payments.api.web;
 import com.paymentgateway.payments.api.dto.ErrorResponse;
 import com.paymentgateway.payments.domain.exception.IdempotencyInProgressException;
 import com.paymentgateway.payments.domain.exception.InvalidPaymentTransitionException;
-import com.paymentgateway.payments.domain.exception.MissingIdempotencyKeyException;
 import com.paymentgateway.payments.domain.exception.NoReceiptsForOrderException;
 import com.paymentgateway.payments.domain.exception.PaymentAwaitingBankException;
 import com.paymentgateway.payments.domain.exception.PaymentNotFoundException;
 import com.paymentgateway.payments.domain.idempotency.exception.IdempotencyConflictException;
+import jakarta.validation.ConstraintViolationException;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -29,20 +31,31 @@ public class PaymentApiExceptionHandler {
                 .body(new ErrorResponse("PAYMENT_NOT_FOUND", ex.getMessage()));
     }
 
-    @ExceptionHandler(MissingIdempotencyKeyException.class)
-    public ResponseEntity<ErrorResponse> handleMissingIdempotencyKey(MissingIdempotencyKeyException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("MISSING_IDEMPOTENCY_KEY", ex.getMessage()));
-    }
+    private static final String IDEMPOTENCY_KEY_MESSAGE = "Idempotency-Key header is required for this operation";
 
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingHeader(MissingRequestHeaderException ex) {
         if ("Idempotency-Key".equalsIgnoreCase(ex.getHeaderName())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ErrorResponse("MISSING_IDEMPOTENCY_KEY", ex.getMessage()));
+                    .body(new ErrorResponse("MISSING_IDEMPOTENCY_KEY", IDEMPOTENCY_KEY_MESSAGE));
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse("MISSING_HEADER", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        boolean idempotencyKeyViolation = ex.getConstraintViolations().stream()
+                .anyMatch(violation -> violation.getPropertyPath().toString().contains("idempotencyKey"));
+        if (idempotencyKeyViolation) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("MISSING_IDEMPOTENCY_KEY", IDEMPOTENCY_KEY_MESSAGE));
+        }
+        String message = ex.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining("; "));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("VALIDATION_FAILED", message));
     }
 
     @ExceptionHandler(IdempotencyConflictException.class)
@@ -69,6 +82,18 @@ public class PaymentApiExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAwaitingBank(PaymentAwaitingBankException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(new ErrorResponse("PAYMENT_AWAITING_BANK", ex.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        if (message.isBlank()) {
+            message = "Request validation failed";
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("VALIDATION_FAILED", message));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
